@@ -1,6 +1,32 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 
+export const Logo: React.FC<{ className?: string, showText?: boolean }> = ({ className = "", showText = true }) => (
+  <div className={`flex items-center gap-3 ${className}`}>
+    <div className="relative w-8 h-8 flex-shrink-0">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-purple-600 rounded-lg blur-[2px] opacity-80"></div>
+      <div className="absolute inset-0.5 bg-slate-900 rounded-md flex items-center justify-center border border-slate-700/50">
+        <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
+        <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
+      </div>
+    </div>
+    {showText && (
+      <div className="flex flex-col">
+        <span className="font-bold text-lg leading-none bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+          PixelGenie
+        </span>
+        <span className="text-[10px] text-primary-400 font-medium tracking-wider uppercase">
+          Forensics AI
+        </span>
+      </div>
+    )}
+  </div>
+);
+
 export const Spinner: React.FC<{ className?: string }> = ({ className = "" }) => (
   <svg className={`animate-spin h-5 w-5 ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

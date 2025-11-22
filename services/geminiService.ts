@@ -52,8 +52,8 @@ export const fetchImageFromUrl = async (url: string): Promise<File> => {
 };
 
 /**
- * Helper: Resize image to ensure it fits within Gemini's processing limits (avoids 500 errors)
- * Downscales to max 1024px dimension and uses JPEG compression.
+ * Helper: Resize image to ensure it fits within Gemini's processing limits and optimizes speed.
+ * Downscales to max 800px (was 1024px) and uses aggressive JPEG compression.
  */
 const optimizeImageForApi = (base64: string, mimeType: string): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -61,7 +61,7 @@ const optimizeImageForApi = (base64: string, mimeType: string): Promise<string> 
     img.src = `data:${mimeType};base64,${base64}`;
     
     img.onload = () => {
-      const MAX_SIZE = 1024; // Safe limit for GenAI image editing to prevent timeouts
+      const MAX_SIZE = 800; // Reduced from 1024 for faster upload/tokenization
       let width = img.width;
       let height = img.height;
 
@@ -97,9 +97,9 @@ const optimizeImageForApi = (base64: string, mimeType: string): Promise<string> 
         // Draw and compress
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Use JPEG 0.85 for optimal balance of quality and payload size
-        // This drastic reduction in payload size prevents the XHR Error / RPC Failed 500
-        const newDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        // Use JPEG 0.70 for speed. Visual artifacts from compression are acceptable 
+        // as the model looks at semantic consistency mainly.
+        const newDataUrl = canvas.toDataURL('image/jpeg', 0.70);
         resolve(newDataUrl.split(',')[1]);
       } catch (e) {
         reject(new Error("Failed to process image canvas"));
@@ -140,7 +140,6 @@ export const scanForAIMetadata = async (file: File): Promise<{ detected: boolean
 
 /**
  * Detects text blocks and translates them, returning bounding box coordinates.
- * Used for self-implemented canvas rendering.
  */
 export const detectTextAndTranslate = async (
   base64: string,
@@ -190,11 +189,13 @@ export const detectTextAndTranslate = async (
 };
 
 /**
- * Analyze an image using Gemini 2.5 Flash with Deep Thinking Mode + ELA Forensic Data
+ * Analyze an image using Gemini 2.5 Flash.
+ * OPTIMIZED FOR SPEED & ACCURACY.
  */
 export const analyzeImage = async (
   originalBase64: string, 
   elaBase64: string,
+  mfrBase64: string | null, 
   mimeType: string, 
   lang: Language
 ): Promise<AnalysisData> => {
@@ -212,55 +213,59 @@ export const analyzeImage = async (
     const targetLang = langMap[lang] || "English";
     const langInstruction = `The final JSON output values MUST be in ${targetLang}.`;
 
+    // Optimize the original image for payload size before sending to LLM
+    // This significantly speeds up the request
+    const fastBase64 = await optimizeImageForApi(originalBase64, mimeType);
+
+    const parts: any[] = [
+      { inlineData: { mimeType: "image/jpeg", data: fastBase64 } },
+      { inlineData: { mimeType: 'image/png', data: elaBase64 } }
+    ];
+    if (mfrBase64) parts.push({ inlineData: { mimeType: 'image/png', data: mfrBase64 } });
+
+    parts.push({
+      text: `You are a Lead Digital Forensic Analyst specializing in detecting AI-generated media (Flux, Midjourney v6, Sora) and advanced Photoshop manipulation.
+      
+      **INPUTS**:
+      1. **Original Image**
+      2. **ELA Map** (Rainbow): Error Level Analysis. Shows compression discrepancies.
+      3. **MFR Map** (Grayscale): Noise Analysis. Authentic photos have uniform noise. AI often has 'black voids' (no noise).
+
+      **EXECUTION PROTOCOL**:
+      
+      **PHASE 1: SEMANTIC & PHYSICS CHECK (Primary Detection Method)**
+      *Scan the Original Image closely.*
+      - **AI Artifacts**: Look for glossy/waxy skin texture, perfect symmetry, melded fingers, nonsensical background text, floating objects, or impossible lighting.
+      - **Logic**: Do shadows match the light source? Are reflections correct?
+      - **Verdict Hint**: If it looks "too perfect" or has "dream-like" physics -> Likely AI.
+
+      **PHASE 2: FORENSIC MAP CONFIRMATION**
+      - **ELA (Rainbow)**:
+        - **IGNORE** white/rainbow edges on high-contrast lines (text, sharp borders). This is normal JPEG behavior.
+        - **FLAG** if a specific object (e.g., a face) is purple while the body is blue. This indicates SPLICING.
+      - **MFR (Grayscale)**:
+        - **Authentic**: Uniform grain/static across the whole image.
+        - **AI Generated**: Often shows smooth black areas (voids) where texture should be, lacking camera sensor noise.
+
+      ${langInstruction}
+
+      **DECISION RULES**:
+      1. **AI Generated**: Visually flawless but "plastic" look OR MFR shows lack of noise (black voids) + ELA is uniform.
+      2. **Tampered/Spliced**: ELA shows distinct colored block on an object.
+      3. **Authentic**: Natural imperfections, consistent noise, consistent ELA (except edges).
+
+      Return the analysis in JSON.`
+    });
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          // PART 1: Original Image
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: originalBase64,
-            },
-          },
-          // PART 2: ELA Heatmap (Forensic Evidence)
-          {
-            inlineData: {
-              mimeType: 'image/png',
-              data: elaBase64,
-            },
-          },
-          // PART 3: Comprehensive Forensic Instruction
-          {
-            text: `You are the world's leading Digital Forensic Expert.
-            You have two inputs: 1. Original Image. 2. Enhanced ELA (Error Level Analysis) Heatmap.
-            
-            ${langInstruction}
-
-            Your task is to perform a rigorous "Dual-Track Analysis" to detect both **AI Generation** and **Manual Tampering (Photoshop)**.
-            
-            ### TRACK 1: DETECTING AI GENERATION (Deepfakes / Midjourney / Stable Diffusion / Flux)
-            Scrutinize the image for these specific AI artifacts:
-            1. **Unnatural Textures**: Look for "waxy", overly smooth, or "plastic" skin. Look for "painterly" hair that lacks individual strands. Check for noisy patterns in flat areas.
-            2. **Inconsistent Lighting**: Check if shadows fall in different directions for different objects. Look for impossible reflections in eyes or mirrors.
-            3. **Semantic Inconsistencies**: Check for logical errors. 
-               - Hands/Fingers: Are there 6 fingers? Merged fingers? 
-               - Text: Is background text gibberish or alien-like?
-               - Accessories: Do glasses/earrings match on both sides?
-               - Physics: Are objects melting or floating?
-
-            ### TRACK 2: DETECTING MANUAL MANIPULATION (Photoshop / Splice)
-            Use the ELA Heatmap:
-            1. **The Rainbow Rule**: Authentic images have uniform noise (rainbow speckles) across similar textures.
-            2. **Alien Artifacts**: If an object (e.g., a face, sign, or person) is significantly BRIGHTER or has a DIFFERENT COLOR noise pattern than the background, it is a foreign insertion.
-            
-            Return the analysis in JSON format.`
-          }
-        ]
-      },
+      contents: { parts },
       config: {
-        thinkingConfig: { thinkingBudget: 12000 },
-        maxOutputTokens: 8192,
+        temperature: 0.1, // Low temperature for factual analysis
+        // Speed Optimization: Reduced budget to 1024. 
+        // Sufficient for "Check 1, Check 2, Verdict" logic without over-thinking.
+        thinkingConfig: { thinkingBudget: 1024 }, 
+        maxOutputTokens: 4096,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -305,7 +310,6 @@ export const analyzeImage = async (
 
 /**
  * Edit/Modify an image using Gemini 2.5 Flash Image Model
- * Supports both Image-to-Image (if base64 provided) and Text-to-Image (if base64 is null)
  */
 export const modifyImage = async (
   base64: string | null, 
@@ -315,7 +319,6 @@ export const modifyImage = async (
   try {
     const parts: any[] = [];
 
-    // If image is provided, optimize and add it (Image-to-Image)
     if (base64 && mimeType) {
        const optimizedBase64 = await optimizeImageForApi(base64, mimeType);
        parts.push({
@@ -326,7 +329,6 @@ export const modifyImage = async (
        });
     }
 
-    // Add text prompt
     parts.push({ text: prompt });
 
     const response = await ai.models.generateContent({
@@ -334,7 +336,6 @@ export const modifyImage = async (
       contents: { parts },
     });
 
-    // The model returns an image in the response parts
     const candidates = response.candidates;
     if (candidates && candidates.length > 0) {
       const parts = candidates[0].content.parts;
@@ -362,10 +363,7 @@ export const translateImageText = async (base64: string, mimeType: string, targe
       contents: {
         parts: [
           { inlineData: { mimeType, data: base64 } },
-          { text: `Perform High-Precision OCR on this image. 
-                   1. Transcribe the original text exactly as it appears, preserving line breaks.
-                   2. Translate the text to ${targetLang}.
-                   3. Detect the original language.` }
+          { text: `Perform High-Precision OCR. Transcribe and translate to ${targetLang}.` }
         ]
       },
       config: {

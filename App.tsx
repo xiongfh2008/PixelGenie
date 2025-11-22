@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { AppMode, ImageState, AnalysisData, Language, TranslationData, TextBlock } from './types';
+import { AppMode, AnalysisData, Language, TranslationData, TextBlock } from './types';
 import { analyzeImage, modifyImage, translateImageText, fileToBase64, scanForAIMetadata, detectTextAndTranslate } from './services/geminiService';
-import { generateELA } from './services/elaService';
-import { Button, Card, Badge, Spinner, Slider, SidebarItem, Tooltip, CompareSlider, BrushCanvas, BrushTool } from './components/Components';
+import { generateELA, generateSobel, generateLNA, generateMFR } from './services/elaService';
+import { Button, Card, Badge, Spinner, Slider, SidebarItem, Tooltip, CompareSlider, BrushCanvas, BrushTool, Logo } from './components/Components';
 import { UploadArea } from './components/UploadArea';
 
 // --- TRANSLATIONS & CONFIG ---
@@ -70,8 +71,8 @@ const TRANSLATIONS: Record<Language, any> = {
     toolLasso: "Lasso",
     toolEraser: "Eraser",
     brushSize: "Size",
-    statusGeneratingELA: "Generating Forensic ELA Heatmap...",
-    statusAnalyzingAI: "Running AI Forensic Analysis...",
+    statusGeneratingELA: "Generating Forensic Maps...",
+    statusAnalyzingAI: "AI Analyzing Evidence (Flash Mode)...",
     statusProcessing: "Processing Image...",
     tooltipConfidence: "The AI's confidence level in the authenticity verdict based on analyzed features.",
     tooltipAiProb: "Probability that the image was synthesized by Generative AI models.",
@@ -140,8 +141,8 @@ const TRANSLATIONS: Record<Language, any> = {
     toolLasso: "套索工具",
     toolEraser: "橡皮擦",
     brushSize: "画笔大小",
-    statusGeneratingELA: "正在生成 ELA 误差热力图...",
-    statusAnalyzingAI: "AI 正在进行深度取证分析...",
+    statusGeneratingELA: "正在生成 ELA 和 MFR 取证图谱...",
+    statusAnalyzingAI: "AI 正在进行快速智能分析...",
     statusProcessing: "正在处理图片...",
     tooltipConfidence: "AI 基于视觉特征对鉴伪结论的置信度。",
     tooltipAiProb: "该图片由生成式 AI 合成的概率估计。",
@@ -210,7 +211,7 @@ const TRANSLATIONS: Record<Language, any> = {
      toolLasso: "Lazo",
      toolEraser: "Borrador",
      brushSize: "Tamaño",
-     statusGeneratingELA: "Generando mapa de calor ELA...",
+     statusGeneratingELA: "Generando mapa ELA, MFR...",
      statusAnalyzingAI: "Ejecutando análisis forense...",
      statusProcessing: "Procesando imagen...",
      tooltipConfidence: "Nivel de confianza de la IA en el veredicto basado en características visuales.",
@@ -231,7 +232,7 @@ const App: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [originalBase64, setOriginalBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState(""); // New State for Granular Loading Status
+  const [loadingText, setLoadingText] = useState("");
   const [lang, setLang] = useState<Language>('en');
   const [userHasSetLang, setUserHasSetLang] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -239,6 +240,9 @@ const App: React.FC = () => {
   // Results
   const [analysisResult, setAnalysisResult] = useState<AnalysisData | null>(null);
   const [elaUrl, setElaUrl] = useState<string | null>(null);
+  const [sobelUrl, setSobelUrl] = useState<string | null>(null);
+  const [lnaUrl, setLnaUrl] = useState<string | null>(null);
+  const [mfrUrl, setMfrUrl] = useState<string | null>(null); 
   const [modifiedImage, setModifiedImage] = useState<string | null>(null);
   const [translationResult, setTranslationResult] = useState<TranslationData | null>(null);
   const [aiScanResult, setAiScanResult] = useState<{ detected: boolean; tool?: string; prob?: number } | null>(null);
@@ -264,8 +268,6 @@ const App: React.FC = () => {
   const t = TRANSLATIONS[lang];
 
   // --- EFFECTS ---
-  
-  // 1. IP Geolocation
   useEffect(() => {
     const detectLang = async () => {
       if (userHasSetLang) return;
@@ -273,46 +275,27 @@ const App: React.FC = () => {
         const res = await fetch('https://ipapi.co/json/');
         const data = await res.json();
         const countryCode = data.country_code; 
-        
         const map: Record<string, Language> = {
-          'CN': 'zh', 'HK': 'zh', 'TW': 'zh',
-          'US': 'en', 'GB': 'en', 'AU': 'en',
-          'ES': 'es', 'MX': 'es',
-          'JP': 'ja',
-          'FR': 'fr',
-          'DE': 'de',
-          'BR': 'pt', 'PT': 'pt'
+          'CN': 'zh', 'HK': 'zh', 'TW': 'zh', 'US': 'en', 'GB': 'en', 'AU': 'en',
+          'ES': 'es', 'MX': 'es', 'JP': 'ja', 'FR': 'fr', 'DE': 'de', 'BR': 'pt', 'PT': 'pt'
         };
-        
         if (map[countryCode]) setLang(map[countryCode]);
-      } catch (e) {
-        console.warn("IP Geolocation failed, defaulting to English");
-      }
+      } catch (e) { console.warn("IP Geolocation failed"); }
     };
     detectLang();
   }, [userHasSetLang]);
 
-  // 2. Responsive Resize Observer for BrushCanvas Alignment
   useEffect(() => {
     if (!imgRef.current) return;
-
     const resizeObserver = new ResizeObserver((entries) => {
       for (let entry of entries) {
-        setImgDimensions({ 
-          w: entry.contentRect.width, 
-          h: entry.contentRect.height 
-        });
-        // Clear mask on resize to avoid distortion
+        setImgDimensions({ w: entry.contentRect.width, h: entry.contentRect.height });
         setManualMaskBase64(null); 
       }
     });
-
     resizeObserver.observe(imgRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [file, mode]); // Re-attach when file or mode changes
+    return () => resizeObserver.disconnect();
+  }, [file, mode]);
 
   // --- HANDLERS ---
 
@@ -331,26 +314,44 @@ const App: React.FC = () => {
     setFile(uploadedFile);
     setPreviewUrl(URL.createObjectURL(uploadedFile));
     setLoading(true);
-    setLoadingText(t.statusProcessing || "Processing...");
+    setLoadingText(t.statusProcessing);
     
     try {
       const base64 = await fileToBase64(uploadedFile);
       setOriginalBase64(base64);
       
       if (mode === AppMode.FORENSICS) {
-        setLoadingText(t.statusGeneratingELA || "Generating Forensic ELA...");
-        await new Promise(r => setTimeout(r, 100)); 
-        
-        const ela = await generateELA(uploadedFile);
+        // SPEED OPTIMIZATION PIPELINE
+        // 1. Prioritize Essential Maps for AI (ELA & MFR)
+        setLoadingText(t.statusGeneratingELA);
+        const [ela, mfr] = await Promise.all([
+          generateELA(uploadedFile),
+          generateMFR(uploadedFile)
+        ]);
+
         setElaUrl(`data:image/png;base64,${ela}`);
+        setMfrUrl(`data:image/png;base64,${mfr}`);
         
-        setLoadingText(t.statusAnalyzingAI || "Running AI Analysis...");
-        const result = await analyzeImage(base64, ela, uploadedFile.type, lang);
+        // 2. Start API Call Immediately (Async)
+        setLoadingText(t.statusAnalyzingAI);
+        const analysisPromise = analyzeImage(base64, ela, mfr, uploadedFile.type, lang);
+
+        // 3. Generate Secondary Maps (Sobel, LNA) in background for UI
+        // While these calculate, the network request for analysisPromise is flying.
+        const [sobel, lna] = await Promise.all([
+          generateSobel(uploadedFile),
+          generateLNA(uploadedFile)
+        ]);
+        setSobelUrl(`data:image/png;base64,${sobel}`);
+        setLnaUrl(`data:image/png;base64,${lna}`);
+        
+        // 4. Await Final Result
+        const result = await analysisPromise;
         setAnalysisResult(result);
       }
     } catch (error) {
       console.error(error);
-      alert("Error processing image. Please try another file.");
+      alert("Error processing image.");
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -364,12 +365,13 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setModifiedImage(null);
     setElaUrl(null);
+    setSobelUrl(null);
+    setLnaUrl(null);
+    setMfrUrl(null);
     setTranslationResult(null);
     setAiScanResult(null);
     setManualMaskBase64(null);
   };
-
-  // --- FEATURE RUNNERS ---
 
   const runForensics = async () => {
     if (!originalBase64 || !file) return;
@@ -377,16 +379,36 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     try {
       setLoadingText(t.statusGeneratingELA);
-      const ela = await generateELA(file);
-      setElaUrl(`data:image/png;base64,${ela}`);
       
+      // 1. Essential Maps
+      const [ela, mfr] = await Promise.all([
+        generateELA(file),
+        generateMFR(file)
+      ]);
+      
+      setElaUrl(`data:image/png;base64,${ela}`);
+      setMfrUrl(`data:image/png;base64,${mfr}`);
+      
+      // 2. Start API
       setLoadingText(t.statusAnalyzingAI);
-      const result = await analyzeImage(originalBase64, ela, file.type, lang);
+      const analysisPromise = analyzeImage(originalBase64, ela, mfr, file.type, lang);
+
+      // 3. Secondary Maps
+      const [sobel, lna] = await Promise.all([
+        generateSobel(file),
+        generateLNA(file)
+      ]);
+      setSobelUrl(`data:image/png;base64,${sobel}`);
+      setLnaUrl(`data:image/png;base64,${lna}`);
+
+      // 4. Result
+      const result = await analysisPromise;
       setAnalysisResult(result);
+
     } catch (e) { alert("Forensics Failed"); } 
     finally { setLoading(false); setLoadingText(""); }
   };
-
+  
   const runEditor = async (toolType: 'BG' | 'ENHANCE' | 'CUTOUT' | 'CUSTOM') => {
     if (!originalBase64 || !file) return;
     setLoading(true);
@@ -394,11 +416,10 @@ const App: React.FC = () => {
     setModifiedImage(null);
     try {
       let prompt = "";
-      if (toolType === 'BG') prompt = "Remove the background from this image. Keep the subject sharp and on a transparent background.";
-      if (toolType === 'ENHANCE') prompt = "Enhance this image. Increase resolution, sharpness, and fix lighting issues. Make it look professional.";
-      if (toolType === 'CUTOUT') prompt = "Create a precise cutout of the main subject. Remove everything else.";
+      if (toolType === 'BG') prompt = "Remove the background. Keep the subject sharp on transparent background.";
+      if (toolType === 'ENHANCE') prompt = "Enhance image resolution, sharpness, and lighting.";
+      if (toolType === 'CUTOUT') prompt = "Create a precise cutout of the main subject.";
       if (toolType === 'CUSTOM') prompt = editorPrompt;
-
       const resultBase64 = await modifyImage(originalBase64, file.type, prompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
     } catch (e) { alert("Editing Failed"); }
@@ -410,26 +431,14 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingText(t.statusProcessing);
     setModifiedImage(null);
-    setTranslationResult(null);
-
     try {
-      // 1. API Intelligence
       const data = await detectTextAndTranslate(originalBase64, file.type, targetTransLang);
       setTranslationResult(data);
-
-      // 2. Local Rendering
-      const img = new Image();
-      img.src = previewUrl!;
-      await new Promise(r => img.onload = r);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      const img = new Image(); img.src = previewUrl!; await new Promise(r => img.onload = r);
+      const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error("Canvas Error");
-
+      if (!ctx) return;
       ctx.drawImage(img, 0, 0);
-
       if (data.blocks) {
         data.blocks.forEach(block => {
            const [ymin, xmin, ymax, xmax] = block.box_2d;
@@ -437,647 +446,221 @@ const App: React.FC = () => {
            const y = ymin * (img.height / 1000);
            const w = (xmax - xmin) * (img.width / 1000);
            const h = (ymax - ymin) * (img.height / 1000);
-
-           // Improved Background Fill (Semi-transparent average color)
            const p = ctx.getImageData(Math.max(0, x), Math.max(0, y-2), 1, 1).data;
            ctx.fillStyle = `rgba(${p[0]},${p[1]},${p[2]}, 0.85)`;
            ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-
-           // Improved Text Style
-           ctx.fillStyle = "black";
-           if ((p[0]*0.299 + p[1]*0.587 + p[2]*0.114) < 128) ctx.fillStyle = "white";
-           
-           ctx.shadowColor = "rgba(0,0,0,0.5)";
-           ctx.shadowBlur = 2;
-           
-           // Adjust font size to fit height
-           let fontSize = h * 0.85; 
-           ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-           ctx.textBaseline = "middle"; // Center vertically
-           
-           // Simple text fitting (scaling width if text is too long)
+           ctx.fillStyle = (p[0]*0.299 + p[1]*0.587 + p[2]*0.114) < 128 ? "white" : "black";
+           ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 2;
+           let fontSize = h * 0.85; ctx.font = `bold ${fontSize}px Arial, sans-serif`; ctx.textBaseline = "middle";
            const textMetrics = ctx.measureText(block.translated);
            if (textMetrics.width > w) {
-              // Scale font down if text is too wide
               const scale = w / textMetrics.width;
               ctx.setTransform(scale, 0, 0, 1, x + (w - textMetrics.width * scale) / 2, y + h/2);
               ctx.fillText(block.translated, 0, 0);
-              ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+              ctx.setTransform(1, 0, 0, 1, 0, 0);
            } else {
-              // Center text horizontally
               ctx.fillText(block.translated, x + (w - textMetrics.width) / 2, y + h/2);
            }
         });
       }
-
       setModifiedImage(canvas.toDataURL('image/jpeg'));
-
-    } catch (e) { 
-      console.error(e);
-      alert("Translation Failed"); 
-    }
-    finally { setLoading(false); setLoadingText(""); }
+    } catch (e) { alert("Translation Failed"); } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runLogoGen = async () => {
-    setLoading(true);
-    setLoadingText("Generating Logo...");
-    setModifiedImage(null);
+    setLoading(true); setLoadingText("Generating Logo..."); setModifiedImage(null);
     try {
-      let finalPrompt = "";
-      if (file) {
-        finalPrompt = `Turn this sketch or reference image into a high-quality, professional vector logo. 
-                       Style: ${editorPrompt || "Modern, Minimalist"}. 
-                       Output: A clean logo on a white background.`;
-      } else {
-        finalPrompt = `Generate a professional logo based on this description: "${editorPrompt}".
-                       Style: Vector, Minimalist, High Quality. White background.`;
-      }
-      
+      let finalPrompt = file ? `Turn sketch to logo. Style: ${editorPrompt}` : `Generate logo: "${editorPrompt}". Vector, Minimalist.`;
       const resultBase64 = await modifyImage(originalBase64, file?.type || null, finalPrompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
-    } catch (e) { alert("Logo Generation Failed"); }
-    finally { setLoading(false); setLoadingText(""); }
+    } catch (e) { alert("Logo Failed"); } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runCompressor = async () => {
     if (!file || !previewUrl) return;
-    setLoading(true);
-    setLoadingText("Compressing...");
+    setLoading(true); setLoadingText("Compressing...");
     try {
-      const img = new Image();
-      img.src = previewUrl;
-      await new Promise(r => img.onload = r);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0);
-      
+      const img = new Image(); img.src = previewUrl; await new Promise(r => img.onload = r);
+      const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+      const ctx = canvas.getContext('2d'); ctx?.drawImage(img, 0, 0);
       const dataUrl = canvas.toDataURL('image/jpeg', compQuality);
       setCompResultUrl(dataUrl);
-      
-      const head = 'data:image/jpeg;base64,';
-      const size = Math.round((dataUrl.length - head.length) * 3 / 4);
-      setCompSize(size);
-
-    } catch (e) { alert("Compression Failed"); }
-    finally { setLoading(false); setLoadingText(""); }
+      setCompSize(Math.round((dataUrl.length - 23) * 3 / 4));
+    } catch (e) { alert("Compression Failed"); } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runDewatermark = async () => {
     if (!originalBase64 || !file) return;
-    setLoading(true);
-    setLoadingText(t.statusProcessing);
-    setModifiedImage(null);
+    setLoading(true); setLoadingText(t.statusProcessing); setModifiedImage(null);
     try {
-      let prompt = "";
-      let imageToSend = originalBase64;
-
+      let prompt = ""; let imageToSend = originalBase64;
       if (dewatermarkMode === 'auto') {
-        prompt = `Strictly remove the text, watermark, or object described as "${watermarkText || 'watermark'}" from this image.
-                  Use high-fidelity inpainting to fill the gaps with the surrounding background texture.
-                  CRITICAL: Do NOT add any new icons, logos, text, or objects.
-                  The output must look exactly like the original image but without the watermark.`;
+        prompt = `Strictly remove object described as "${watermarkText || 'watermark'}". Inpaint background. No new objects.`;
       } else {
-        if (!manualMaskBase64) {
-          alert("Please paint over the watermark first.");
-          setLoading(false);
-          return;
-        }
-
-        // Composite red mask
-        const img = new Image();
-        img.src = previewUrl!;
-        await new Promise(r => img.onload = r);
-
-        const maskImg = new Image();
-        maskImg.src = manualMaskBase64;
-        await new Promise(r => maskImg.onload = r);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error("Canvas error");
-
-        ctx.drawImage(img, 0, 0);
-        ctx.drawImage(maskImg, 0, 0, img.width, img.height);
-
+        if (!manualMaskBase64) { alert("Paint over watermark first."); setLoading(false); return; }
+        const img = new Image(); img.src = previewUrl!; await new Promise(r => img.onload = r);
+        const maskImg = new Image(); maskImg.src = manualMaskBase64; await new Promise(r => maskImg.onload = r);
+        const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext('2d'); if (!ctx) return;
+        ctx.drawImage(img, 0, 0); ctx.drawImage(maskImg, 0, 0, img.width, img.height);
         imageToSend = canvas.toDataURL('image/jpeg').split(',')[1];
-
-        prompt = `Look at the red masked area in this image.
-                  Remove the red mask and whatever is underneath it.
-                  Fill the area by extending the surrounding background textures and patterns (Inpainting).
-                  CRITICAL: Do NOT generate new objects, symbols, or text in the erased area.
-                  Just restore the background cleanly.`;
+        prompt = `Look at red mask. Remove it and content under it. Inpaint background. No new objects.`;
       }
-
       const resultBase64 = await modifyImage(imageToSend, file.type, prompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
-    } catch (e) { alert("Dewatermark Failed"); }
-    finally { setLoading(false); setLoadingText(""); }
+    } catch (e) { alert("Dewatermark Failed"); } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runAiDetector = async () => {
     if (!file || !originalBase64) return;
-    setLoading(true);
-    setLoadingText("Scanning for AI patterns...");
+    setLoading(true); setLoadingText("Scanning AI patterns...");
     try {
       const local = await scanForAIMetadata(file);
-      if (local.detected) {
-        setAiScanResult({ detected: true, tool: local.tool, prob: 100 });
-      } else {
-        const analysis = await analyzeImage(originalBase64, "", file.type, lang);
-        const prob = analysis.integrity.ai_generated_probability || 
-                     (analysis.integrity.is_suspected_fake ? 80 : 10);
-        setAiScanResult({ 
-          detected: prob > 50, 
-          tool: "Unknown AI Model", 
-          prob 
-        });
+      if (local.detected) setAiScanResult({ detected: true, tool: local.tool, prob: 100 });
+      else {
+        const analysis = await analyzeImage(originalBase64, "", null, file.type, lang);
+        const prob = analysis.integrity.ai_generated_probability || (analysis.integrity.is_suspected_fake ? 80 : 10);
+        setAiScanResult({ detected: prob > 50, tool: "Unknown AI Model", prob });
       }
-    } catch (e) { alert("Scan Failed"); }
-    finally { setLoading(false); setLoadingText(""); }
+    } catch (e) { alert("Scan Failed"); } finally { setLoading(false); setLoadingText(""); }
   };
 
-  const handleBrushDraw = (dataUrl: string) => {
-    setManualMaskBase64(dataUrl);
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
+  const handleBrushDraw = (dataUrl: string) => setManualMaskBase64(dataUrl);
+  
+  // --- RENDER ---
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col md:flex-row font-sans">
       
       {/* MOBILE HEADER */}
       <div className="md:hidden p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-purple-600 rounded-lg shadow-lg shadow-primary-500/20"></div>
-          <span className="font-bold text-lg tracking-tight text-white">PixelGenie</span>
-        </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-300">
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
-          </svg>
-        </button>
+        <Logo />
+        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-300"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen?"M6 18L18 6M6 6l12 12":"M4 6h16M4 12h16M4 18h16"}/></svg></button>
       </div>
-
+      
       {/* SIDEBAR */}
-      <>
-        {isSidebarOpen && (
-          <div className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
-        )}
-        
-        <aside className={`
-          fixed md:sticky md:top-0 left-0 h-full w-72 bg-slate-900/95 backdrop-blur-md border-r border-slate-800/50 
-          transform transition-transform duration-300 ease-in-out z-50
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          flex flex-col
-        `}>
-          <div className="p-6 border-b border-slate-800/50">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-purple-600 rounded-lg shadow-lg shadow-primary-500/20"></div>
-              <span className="font-bold text-xl tracking-tight text-white">{t.title}</span>
-            </div>
-            <p className="text-xs text-slate-500 pl-11">{t.subtitle}</p>
-          </div>
+      <aside className={`fixed md:sticky md:top-0 left-0 h-full w-72 bg-slate-900/95 backdrop-blur-md border-r border-slate-800/50 transform transition-transform duration-300 z-50 ${isSidebarOpen?'translate-x-0':'-translate-x-full md:translate-x-0'} flex flex-col`}>
+         <div className="p-6 border-b border-slate-800/50">
+            <Logo />
+         </div>
+         <div className="p-4"><Button variant="primary" fullWidth icon={<span>+</span>} onClick={resetApp}>{t.newImage}</Button></div>
+         <div className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
+           <SidebarItem active={mode === AppMode.FORENSICS} onClick={() => switchMode(AppMode.FORENSICS)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>} label={t.navForensics} description={t.navForensicsDesc} />
+           <SidebarItem active={mode === AppMode.AI_DETECTOR} onClick={() => switchMode(AppMode.AI_DETECTOR)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>} label={t.navAIDetector} description={t.navAIDetectorDesc} />
+           <SidebarItem active={mode === AppMode.EDITOR} onClick={() => switchMode(AppMode.EDITOR)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>} label={t.navEditor} description={t.navEditorDesc} />
+           <SidebarItem active={mode === AppMode.DEWATERMARK} onClick={() => switchMode(AppMode.DEWATERMARK)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>} label={t.navDewatermark} description={t.navDewatermarkDesc} />
+           <SidebarItem active={mode === AppMode.TRANSLATOR} onClick={() => switchMode(AppMode.TRANSLATOR)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>} label={t.navTranslator} description={t.navTranslatorDesc} />
+           <SidebarItem active={mode === AppMode.LOGO} onClick={() => switchMode(AppMode.LOGO)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>} label={t.navLogo} description={t.navLogoDesc} />
+           <SidebarItem active={mode === AppMode.COMPRESSOR} onClick={() => switchMode(AppMode.COMPRESSOR)} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>} label={t.navCompress} description={t.navCompressDesc} />
+         </div>
+         <div className="p-4 bg-slate-900"><select className="w-full bg-slate-800 border border-slate-700 text-slate-300 rounded p-2" value={lang} onChange={(e) => {setLang(e.target.value as Language); setUserHasSetLang(true);}}><option value="en">English</option><option value="zh">中文</option><option value="es">Español</option><option value="ja">日本語</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option></select></div>
+      </aside>
 
-          <div className="p-4">
-            <Button variant="primary" fullWidth icon={<span className="text-xl">+</span>} onClick={resetApp}>
-              {t.newImage}
-            </Button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
-            <SidebarItem active={mode === AppMode.FORENSICS} onClick={() => switchMode(AppMode.FORENSICS)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} label={t.navForensics} description={t.navForensicsDesc} />
-            <SidebarItem active={mode === AppMode.AI_DETECTOR} onClick={() => switchMode(AppMode.AI_DETECTOR)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>} label={t.navAIDetector} description={t.navAIDetectorDesc} />
-            <SidebarItem active={mode === AppMode.EDITOR} onClick={() => switchMode(AppMode.EDITOR)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>} label={t.navEditor} description={t.navEditorDesc} />
-            <SidebarItem active={mode === AppMode.DEWATERMARK} onClick={() => switchMode(AppMode.DEWATERMARK)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>} label={t.navDewatermark} description={t.navDewatermarkDesc} />
-            <SidebarItem active={mode === AppMode.TRANSLATOR} onClick={() => switchMode(AppMode.TRANSLATOR)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" /></svg>} label={t.navTranslator} description={t.navTranslatorDesc} />
-            <SidebarItem active={mode === AppMode.LOGO} onClick={() => switchMode(AppMode.LOGO)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>} label={t.navLogo} description={t.navLogoDesc} />
-            <SidebarItem active={mode === AppMode.COMPRESSOR} onClick={() => switchMode(AppMode.COMPRESSOR)} icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>} label={t.navCompress} description={t.navCompressDesc} />
-          </div>
-
-          <div className="p-4 border-t border-slate-800/50 bg-slate-900">
-             <label className="block text-xs font-medium text-slate-500 mb-2 uppercase tracking-wider">Interface Language</label>
-             <select 
-               className="w-full bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg p-2 focus:ring-primary-500"
-               value={lang}
-               onChange={(e) => { setLang(e.target.value as Language); setUserHasSetLang(true); }}
-             >
-               <option value="en">English</option>
-               <option value="zh">简体中文</option>
-               <option value="es">Español</option>
-               <option value="ja">日本語</option>
-               <option value="fr">Français</option>
-               <option value="de">Deutsch</option>
-               <option value="pt">Português</option>
-             </select>
-          </div>
-        </aside>
-      </>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
-        
-        <section className="mb-8 animate-fade-in">
-           <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight">{t[`nav${mode === 'AI_DETECTOR' ? 'AIDetector' : mode.charAt(0) + mode.slice(1).toLowerCase()}`]}</h1>
-           <p className="text-slate-400 text-lg">{t[`nav${mode === 'AI_DETECTOR' ? 'AIDetector' : mode.charAt(0) + mode.slice(1).toLowerCase()}Desc`]}</p>
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-950">
+        {/* HEADER & UPLOAD UI */}
+        <section className="mb-8">
+           <h1 className="text-3xl md:text-4xl font-bold text-white">{t[`nav${mode === 'AI_DETECTOR' ? 'AIDetector' : mode.charAt(0) + mode.slice(1).toLowerCase()}`]}</h1>
+           <p className="text-slate-400">{t[`nav${mode === 'AI_DETECTOR' ? 'AIDetector' : mode.charAt(0) + mode.slice(1).toLowerCase()}Desc`]}</p>
         </section>
-
-        {/* UPLOAD STAGE */}
-        {(!file && mode !== AppMode.LOGO) && (
-          <div className="max-w-2xl mx-auto mt-20 animate-fade-in">
-            <UploadArea 
-              onFileSelect={handleFileUpload} 
-              label={t.uploadBtn}
-              subLabel={mode === AppMode.FORENSICS ? "Upload original image for best ELA results" : "JPG, PNG, WebP supported"}
-            />
-          </div>
+        
+        {!file && mode !== AppMode.LOGO && (
+          <div className="max-w-2xl mx-auto mt-20"><UploadArea onFileSelect={handleFileUpload} label={t.uploadBtn} subLabel="Supported: JPG, PNG, WebP" /></div>
         )}
-
-        {/* LOGO MODE */}
+        
         {(!file && mode === AppMode.LOGO) && (
-          <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-            <div className="lg:col-span-1 space-y-6">
-              <Card title={t.refImage}>
-                <UploadArea onFileSelect={handleFileUpload} label="Upload Sketch" compact />
-              </Card>
-            </div>
-            <div className="lg:col-span-2 space-y-6">
-               <Card title="Logo Configuration">
-                 <label className="block text-sm font-medium text-slate-400 mb-2">{t.logoPrompt}</label>
-                 <textarea 
-                   className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary-500 mb-4"
-                   rows={4}
-                   placeholder={t.logoPlaceholder}
-                   value={editorPrompt}
-                   onChange={(e) => setEditorPrompt(e.target.value)}
-                 />
-                 <Button variant="primary" fullWidth onClick={runLogoGen} loading={loading} disabled={!editorPrompt}>
-                   {t.logoBtn}
-                 </Button>
-               </Card>
-            </div>
+          <div className="max-w-4xl mx-auto grid grid-cols-3 gap-8">
+            <div className="col-span-1"><Card title={t.refImage}><UploadArea onFileSelect={handleFileUpload} label="Upload Sketch" compact /></Card></div>
+            <div className="col-span-2"><Card title="Config"><textarea className="w-full bg-slate-800 border border-slate-700 rounded p-4 text-white mb-4" rows={4} placeholder={t.logoPlaceholder} value={editorPrompt} onChange={e=>setEditorPrompt(e.target.value)}/><Button fullWidth onClick={runLogoGen} loading={loading} disabled={!editorPrompt}>{t.logoBtn}</Button></Card></div>
           </div>
         )}
 
-        {/* WORKSPACE STAGE */}
         {(file || (mode === AppMode.LOGO && modifiedImage)) && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-fade-in">
-            
-            {/* LEFT: SOURCE & CONTROLS */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            {/* LEFT COLUMN (Source & Tools) */}
             <section className="space-y-6">
-              
-              <Card 
-                title={mode === AppMode.LOGO ? t.refImage : t.sourceImage} 
-                className="relative"
-                action={
-                   file ? (
-                     <button onClick={resetApp} className="text-slate-400 hover:text-red-400 transition-colors">
-                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                     </button>
-                   ) : null
-                }
-              >
+              <Card title={mode===AppMode.LOGO?t.refImage:t.sourceImage} action={file?<button onClick={resetApp} className="text-slate-400 hover:text-red-400"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg></button>:null}>
                 {file ? (
-                  <div className="flex justify-center items-center bg-slate-950 border border-slate-800 rounded-lg p-2 overflow-hidden">
-                    {/* Wrap img in relative inline-block so overlay matches img size exactly */}
-                    <div className="relative inline-block">
-                      <img 
-                        ref={imgRef}
-                        src={previewUrl!} 
-                        alt="Source" 
-                        className="max-h-[500px] w-auto object-contain block" 
-                      />
-                      
-                      {/* Manual Eraser Overlay */}
-                      {mode === AppMode.DEWATERMARK && dewatermarkMode === 'manual' && (
-                        <>
-                          {/* Canvas Layer: Opacity for visual pass-through (so user sees image below mask) */}
-                          <div className="absolute inset-0 z-10 opacity-50">
-                            <BrushCanvas 
-                              width={imgDimensions.w}
-                              height={imgDimensions.h}
-                              onDrawEnd={handleBrushDraw}
-                              tool={currentBrushTool}
-                              brushSize={brushSize}
-                              className="w-full h-full"
-                            />
-                          </div>
-                          
-                          {/* Floating Toolbar: Separate layer, fully opaque, bottom positioned */}
-                          <div 
-                            className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-full px-4 py-2 flex gap-4 shadow-xl z-20"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                              <button onClick={() => setCurrentBrushTool('brush')} className={`p-1.5 rounded ${currentBrushTool === 'brush' ? 'text-yellow-400' : 'text-slate-400 hover:text-white'}`}>
-                                <Tooltip content={t.toolBrush}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></Tooltip>
-                              </button>
-                              <button onClick={() => setCurrentBrushTool('rect')} className={`p-1.5 rounded ${currentBrushTool === 'rect' ? 'text-yellow-400' : 'text-slate-400 hover:text-white'}`}>
-                                <Tooltip content={t.toolRect}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v16H4z" /></svg></Tooltip>
-                              </button>
-                              <button onClick={() => setCurrentBrushTool('lasso')} className={`p-1.5 rounded ${currentBrushTool === 'lasso' ? 'text-yellow-400' : 'text-slate-400 hover:text-white'}`}>
-                                <Tooltip content={t.toolLasso}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16.44V14a2 2 0 00-2-2h-1l-2-2m-5 5l-2 5h10" /></svg></Tooltip>
-                              </button>
-                              <button onClick={() => setCurrentBrushTool('eraser')} className={`p-1.5 rounded ${currentBrushTool === 'eraser' ? 'text-yellow-400' : 'text-slate-400 hover:text-white'}`}>
-                                <Tooltip content={t.toolEraser}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></Tooltip>
-                              </button>
-                              <div className="w-px h-6 bg-slate-700 mx-1"></div>
-                              <div className="flex items-center w-24">
-                                <Slider value={brushSize} min={5} max={100} step={5} onChange={setBrushSize} className="h-2" />
-                              </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                   <div className="flex justify-center items-center bg-slate-950 border border-slate-800 rounded p-2">
+                     <div className="relative inline-block">
+                       <img ref={imgRef} src={previewUrl!} alt="Source" className="max-h-[500px] w-auto object-contain block" />
+                       {mode === AppMode.DEWATERMARK && dewatermarkMode === 'manual' && (
+                         <>
+                           <div className="absolute inset-0 z-10"><BrushCanvas width={imgDimensions.w} height={imgDimensions.h} onDrawEnd={handleBrushDraw} tool={currentBrushTool} brushSize={brushSize} className="w-full h-full opacity-50"/></div>
+                           <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-full px-4 py-2 flex gap-4 shadow-xl z-20" onClick={e=>e.stopPropagation()}>
+                              <button onClick={()=>setCurrentBrushTool('brush')} className={currentBrushTool==='brush'?'text-yellow-400':'text-slate-400'}><Tooltip content={t.toolBrush}>🖊️</Tooltip></button>
+                              <button onClick={()=>setCurrentBrushTool('rect')} className={currentBrushTool==='rect'?'text-yellow-400':'text-slate-400'}><Tooltip content={t.toolRect}>⬜</Tooltip></button>
+                              <button onClick={()=>setCurrentBrushTool('lasso')} className={currentBrushTool==='lasso'?'text-yellow-400':'text-slate-400'}><Tooltip content={t.toolLasso}>➰</Tooltip></button>
+                              <button onClick={()=>setCurrentBrushTool('eraser')} className={currentBrushTool==='eraser'?'text-yellow-400':'text-slate-400'}><Tooltip content={t.toolEraser}>🧼</Tooltip></button>
+                              <div className="w-px h-6 bg-slate-700"></div>
+                              <div className="w-24"><Slider value={brushSize} min={5} max={100} step={5} onChange={setBrushSize} className="h-2"/></div>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   </div>
                 ) : (
-                  <div className="h-64 flex flex-col items-center justify-center text-slate-500 bg-slate-800/30 rounded-xl border-2 border-dashed border-slate-700">
-                    <p>{t.refImage}</p>
-                    <div className="mt-4 w-2/3">
-                       <UploadArea onFileSelect={handleFileUpload} label="Upload" compact />
-                    </div>
-                  </div>
+                   <div className="h-64 flex items-center justify-center border-2 border-dashed border-slate-700 rounded bg-slate-800/30"><UploadArea onFileSelect={handleFileUpload} label="Upload" compact /></div>
                 )}
               </Card>
 
-              {/* EDITOR CONTROLS */}
-              {mode === AppMode.EDITOR && (
-                <Card title={t.editorTools}>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <Button variant="secondary" onClick={() => runEditor('BG')} loading={loading}>{t.toolRemoveBg}</Button>
-                    <Button variant="secondary" onClick={() => runEditor('ENHANCE')} loading={loading}>{t.toolEnhance}</Button>
-                    <Button variant="secondary" onClick={() => runEditor('CUTOUT')} loading={loading}>{t.toolCutout}</Button>
-                  </div>
-                  <div className="space-y-2">
-                    <textarea 
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-sm focus:ring-primary-500"
-                      rows={2}
-                      placeholder={t.toolPromptPlaceholder}
-                      value={editorPrompt}
-                      onChange={(e) => setEditorPrompt(e.target.value)}
-                    />
-                    <Button fullWidth onClick={() => runEditor('CUSTOM')} loading={loading} disabled={!editorPrompt}>Apply Custom Edit</Button>
-                  </div>
-                </Card>
-              )}
-
-              {/* TRANSLATOR CONTROLS */}
-              {mode === AppMode.TRANSLATOR && (
-                 <Card title="Settings">
-                   <div className="flex items-center gap-4 mb-4">
-                     <label className="text-sm font-medium">{t.transLangLabel}</label>
-                     <select 
-                       className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm"
-                       value={targetTransLang}
-                       onChange={(e) => setTargetTransLang(e.target.value)}
-                     >
-                       <option>English</option>
-                       <option>Chinese</option>
-                       <option>Spanish</option>
-                       <option>Japanese</option>
-                       <option>French</option>
-                       <option>German</option>
-                     </select>
-                   </div>
-                   <Button fullWidth onClick={runTranslator} loading={loading}>{t.transBtn}</Button>
-                 </Card>
-              )}
-
-              {/* COMPRESSOR CONTROLS */}
-              {mode === AppMode.COMPRESSOR && (
-                <Card title="Compression Settings">
-                  <Slider 
-                    label={t.compQuality} 
-                    value={compQuality * 100} 
-                    min={10} max={100} step={5} 
-                    onChange={(v) => setCompQuality(v / 100)} 
-                    suffix="%"
-                  />
-                  <div className="mt-6">
-                    <Button fullWidth onClick={runCompressor} loading={loading}>Compress Image</Button>
-                  </div>
-                </Card>
-              )}
-
-              {/* DEWATERMARK CONTROLS */}
-              {mode === AppMode.DEWATERMARK && (
-                <Card title={t.navDewatermark}>
-                  <div className="flex bg-slate-800 p-1 rounded-lg mb-4">
-                    <button onClick={() => setDewatermarkMode('manual')} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${dewatermarkMode === 'manual' ? 'bg-primary-600 text-white' : 'text-slate-400 hover:text-white'}`}>{t.wmModeManual}</button>
-                    <button onClick={() => setDewatermarkMode('auto')} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${dewatermarkMode === 'auto' ? 'bg-primary-600 text-white' : 'text-slate-400 hover:text-white'}`}>{t.wmModeAuto}</button>
-                  </div>
-
-                  <p className="text-xs text-slate-500 mb-4">{t.wmDesc}</p>
-                  
-                  {dewatermarkMode === 'auto' && (
-                    <div className="mb-4">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">{t.wmLabel}</label>
-                      <input 
-                        type="text" 
-                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-2.5 text-sm focus:ring-primary-500"
-                        placeholder={t.wmPlaceholder}
-                        value={watermarkText}
-                        onChange={(e) => setWatermarkText(e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  <Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">
-                    {t.wmBtn}
-                  </Button>
-                </Card>
-              )}
-
-              {/* AI DETECTOR CONTROLS */}
-              {mode === AppMode.AI_DETECTOR && (
-                <Card title="Deep Scan">
-                   <Button fullWidth variant="primary" onClick={runAiDetector} loading={loading}>{t.aiScanBtn}</Button>
-                </Card>
-              )}
-
+              {/* TOOL CONTROLS */}
+              {mode === AppMode.EDITOR && (<Card title={t.editorTools}><div className="grid grid-cols-2 gap-4 mb-4"><Button variant="secondary" onClick={()=>runEditor('BG')} loading={loading}>{t.toolRemoveBg}</Button><Button variant="secondary" onClick={()=>runEditor('ENHANCE')} loading={loading}>{t.toolEnhance}</Button><Button variant="secondary" onClick={()=>runEditor('CUTOUT')} loading={loading}>{t.toolCutout}</Button></div><textarea className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-sm" rows={2} placeholder={t.toolPromptPlaceholder} value={editorPrompt} onChange={e=>setEditorPrompt(e.target.value)}/><Button fullWidth onClick={()=>runEditor('CUSTOM')} loading={loading} disabled={!editorPrompt}>Apply</Button></Card>)}
+              {mode === AppMode.TRANSLATOR && (<Card title="Settings"><select className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm mb-4 w-full" value={targetTransLang} onChange={e=>setTargetTransLang(e.target.value)}><option>English</option><option>Chinese</option><option>Spanish</option><option>Japanese</option><option>French</option></select><Button fullWidth onClick={runTranslator} loading={loading}>{t.transBtn}</Button></Card>)}
+              {mode === AppMode.COMPRESSOR && (<Card title="Settings"><Slider label={t.compQuality} value={compQuality*100} min={10} max={100} step={5} onChange={v=>setCompQuality(v/100)} suffix="%"/><Button fullWidth onClick={runCompressor} loading={loading} className="mt-4">Compress</Button></Card>)}
+              {mode === AppMode.DEWATERMARK && (<Card title={t.navDewatermark}><div className="flex bg-slate-800 p-1 rounded mb-4"><button onClick={()=>setDewatermarkMode('manual')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='manual'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeManual}</button><button onClick={()=>setDewatermarkMode('auto')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='auto'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeAuto}</button></div>{dewatermarkMode==='auto' && <input type="text" className="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-sm mb-4" placeholder={t.wmPlaceholder} value={watermarkText} onChange={e=>setWatermarkText(e.target.value)}/><Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">{t.wmBtn}</Button>}<Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">{t.wmBtn}</Button></Card>)}
+              {mode === AppMode.AI_DETECTOR && (<Card title="Scan"><Button fullWidth variant="primary" onClick={runAiDetector} loading={loading}>{t.aiScanBtn}</Button></Card>)}
             </section>
 
-            {/* RIGHT: RESULTS */}
+            {/* RIGHT COLUMN (Results) */}
             <section className="space-y-6">
-              
-              {/* LOADING STATE */}
-              {loading && !analysisResult && !modifiedImage && !translationResult && !aiScanResult && !compResultUrl && (
-                <Card className="animate-pulse border-primary-500/30 shadow-[0_0_20px_rgba(79,70,229,0.1)]">
-                  <div className="flex flex-col items-center justify-center py-12 text-center min-h-[300px]">
-                    <div className="relative mb-6">
-                       <div className="absolute inset-0 rounded-full bg-primary-500/20 animate-ping"></div>
-                       <Spinner className="relative z-10 w-12 h-12 text-primary-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-2 animate-pulse">{loadingText}</h3>
-                    <p className="text-sm text-slate-400 max-w-xs mx-auto">
-                      {mode === AppMode.FORENSICS ? "Generating pixel-level ELA heatmap and running deep visual analysis..." : "Processing high-resolution image..."}
-                    </p>
-                  </div>
-                </Card>
-              )}
-              
-              {/* FORENSICS RESULTS */}
-              {mode === AppMode.FORENSICS && analysisResult && (
-                 <Card title={t.forensicsTitle} className="animate-fade-in">
-                    <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800">
-                       <div className="flex items-center gap-4">
-                          <div className={`text-4xl ${analysisResult.integrity.is_suspected_fake ? "text-red-500" : "text-green-500"}`}>
-                            {analysisResult.integrity.is_suspected_fake ? "⚠️" : "🛡️"}
+               {loading && !analysisResult && !modifiedImage && (
+                 <Card className="animate-pulse text-center py-12"><Spinner className="w-12 h-12 mx-auto mb-4"/><h3 className="text-xl font-semibold">{loadingText}</h3></Card>
+               )}
+
+               {/* FORENSICS REPORT */}
+               {mode === AppMode.FORENSICS && (
+                 <div className="space-y-6">
+                    {/* 1. REPORT FIRST (Top Right) */}
+                    {analysisResult && (
+                      <Card title={t.forensicsTitle} className="animate-fade-in">
+                          <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800">
+                            <div className="flex items-center gap-4">
+                                <div className={`text-4xl ${analysisResult.integrity.is_suspected_fake?"text-red-500":"text-green-500"}`}>{analysisResult.integrity.is_suspected_fake?"⚠️":"🛡️"}</div>
+                                <div>
+                                  <h3 className={`text-xl font-bold ${analysisResult.integrity.is_suspected_fake?"text-red-400":"text-green-400"}`}>{analysisResult.integrity.is_suspected_fake?t.fakeSuspected:t.fakeAuthentic}</h3>
+                                  <p className="text-sm text-slate-500">Confidence: {analysisResult.integrity.confidence_score}%</p>
+                                </div>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className={`text-xl font-bold ${analysisResult.integrity.is_suspected_fake ? "text-red-400" : "text-green-400"}`}>
-                              {analysisResult.integrity.is_suspected_fake ? t.fakeSuspected : t.fakeAuthentic}
-                            </h3>
-                            <Tooltip content={t.tooltipConfidence}>
-                               <p className="text-sm text-slate-500">Confidence: {analysisResult.integrity.confidence_score}%</p>
-                            </Tooltip>
-                          </div>
-                       </div>
-                       {analysisResult.integrity.ai_generated_probability && (
-                         <Tooltip content={t.tooltipAiProb}>
-                           <div className="text-right">
-                             <p className="text-xs text-slate-500 uppercase">{t.aiProb}</p>
-                             <p className="text-2xl font-mono text-purple-400">{analysisResult.integrity.ai_generated_probability}%</p>
-                           </div>
-                         </Tooltip>
-                       )}
-                    </div>
+                          <p className="text-sm text-slate-300 leading-relaxed p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">{analysisResult.integrity.reasoning}</p>
+                          
+                          {/* AI Analysis Details */}
+                          {analysisResult.integrity.ai_analysis && (
+                            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                              <div className={`p-2 rounded ${analysisResult.integrity.ai_analysis.unnatural_textures ? 'bg-red-900/30 text-red-300 border border-red-900' : 'bg-slate-800 text-slate-500'}`}>Texture Issues</div>
+                              <div className={`p-2 rounded ${analysisResult.integrity.ai_analysis.inconsistent_lighting ? 'bg-red-900/30 text-red-300 border border-red-900' : 'bg-slate-800 text-slate-500'}`}>Bad Lighting</div>
+                              <div className={`p-2 rounded ${analysisResult.integrity.ai_analysis.semantic_inconsistencies ? 'bg-red-900/30 text-red-300 border border-red-900' : 'bg-slate-800 text-slate-500'}`}>Logic Flaws</div>
+                            </div>
+                          )}
+                      </Card>
+                    )}
 
-                    <div className="space-y-6">
-                       <div>
-                         <h4 className="text-sm font-medium text-slate-300 mb-2">Expert Reasoning</h4>
-                         <p className="text-sm text-slate-400 leading-relaxed p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                           {analysisResult.integrity.reasoning}
-                         </p>
-                       </div>
-
-                       <div>
-                          <h4 className="text-sm font-medium text-slate-300 mb-2">Methods Analyzed</h4>
-                          <div className="flex flex-wrap gap-2">
-                             {analysisResult.integrity.methods_analyzed.map(m => (
-                               <Tooltip key={m} content={`${t.tooltipMethod} ${m}`}>
-                                 <Badge color="bg-indigo-900 text-indigo-200 border border-indigo-700/50">{m}</Badge>
-                               </Tooltip>
-                             ))}
-                          </div>
-                       </div>
-                       
-                       {analysisResult.integrity.ai_analysis && (
-                         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                            <div className={`p-2 rounded border ${analysisResult.integrity.ai_analysis.unnatural_textures ? 'bg-red-900/30 border-red-800 text-red-200' : 'bg-green-900/30 border-green-800 text-green-200'}`}>Texture Check</div>
-                            <div className={`p-2 rounded border ${analysisResult.integrity.ai_analysis.inconsistent_lighting ? 'bg-red-900/30 border-red-800 text-red-200' : 'bg-green-900/30 border-green-800 text-green-200'}`}>Lighting Check</div>
-                            <div className={`p-2 rounded border ${analysisResult.integrity.ai_analysis.semantic_inconsistencies ? 'bg-red-900/30 border-red-800 text-red-200' : 'bg-green-900/30 border-green-800 text-green-200'}`}>Logic Check</div>
-                         </div>
-                       )}
-
-                       {elaUrl && (
-                         <div>
-                           <h4 className="text-sm font-medium text-slate-300 mb-2">ELA Heatmap (Error Level Analysis)</h4>
-                           <div className="rounded-lg overflow-hidden border border-slate-700">
-                             <img src={elaUrl} alt="ELA" className="w-full h-auto" />
-                           </div>
-                           <p className="text-xs text-slate-500 mt-1">High-contrast artifacts in solid areas may indicate tampering.</p>
-                         </div>
-                       )}
-                    </div>
-                 </Card>
-              )}
-
-              {/* AI DETECTOR RESULTS */}
-              {mode === AppMode.AI_DETECTOR && aiScanResult && (
-                <Card title="Deep Scan Results" className="animate-fade-in">
-                  <div className="text-center py-8">
-                     <div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-4 ${aiScanResult.detected ? 'bg-red-500/20 text-red-500 ring-4 ring-red-500/10' : 'bg-green-500/20 text-green-500 ring-4 ring-green-500/10'}`}>
-                        <span className="text-3xl font-bold">{aiScanResult.prob}%</span>
-                     </div>
-                     <h3 className="text-2xl font-bold text-white mb-2">{aiScanResult.detected ? t.aiResultPositive : t.aiResultNegative}</h3>
-                     {aiScanResult.tool && (
-                        <Badge color="bg-purple-600 text-white">{t.aiToolDetected}: {aiScanResult.tool}</Badge>
-                     )}
-                  </div>
-                </Card>
-              )}
-
-              {/* RESULT IMAGE & COMPARISON */}
-              {(modifiedImage) && (
-                <Card title="Result" className="animate-fade-in">
-                  {(mode === AppMode.DEWATERMARK || mode === AppMode.EDITOR || mode === AppMode.TRANSLATOR) ? (
-                    <div className="mb-4 h-[400px]">
-                       <CompareSlider 
-                         before={previewUrl!} 
-                         after={modifiedImage} 
-                         className="h-full rounded-lg border border-slate-700"
-                       />
-                       <p className="text-center text-xs text-slate-500 mt-2">{t.compareLabel}</p>
-                    </div>
-                  ) : (
-                    <img src={modifiedImage} alt="Result" className="w-full rounded-lg border border-slate-700 mb-4" />
-                  )}
-
-                  <div className="flex gap-4">
-                    <a href={modifiedImage} download={`pixelgenie_edit_${Date.now()}.jpg`} className="flex-1">
-                      <Button fullWidth variant="primary">{t.downloadBtn}</Button>
-                    </a>
-                  </div>
-                </Card>
-              )}
-
-              {/* TRANSLATION TEXT */}
-              {mode === AppMode.TRANSLATOR && translationResult && (
-                <Card title={t.transResult} className="animate-fade-in">
-                   <div className="grid grid-cols-1 gap-4 max-h-96 overflow-y-auto text-sm">
-                      {translationResult.blocks?.map((block, i) => (
-                        <div key={i} className="bg-slate-800 p-3 rounded border border-slate-700">
-                           <p className="text-slate-400 mb-1 border-b border-slate-700 pb-1 text-xs uppercase">{t.transOrig}</p>
-                           <p className="text-white mb-2">{block.original}</p>
-                           <p className="text-primary-400 mb-1 border-b border-slate-700/50 pb-1 text-xs uppercase">{t.transResult}</p>
-                           <p className="text-white">{block.translated}</p>
+                    {/* 2. MAPS SECOND (Below Report) */}
+                    {(elaUrl || sobelUrl) && (
+                      <Card title="Forensic Maps (Evidence)" className="animate-fade-in">
+                        <div className="grid grid-cols-2 gap-4">
+                            {elaUrl && (<div><h4 className="text-xs font-medium text-slate-300 mb-2">ELA HEATMAP (Compression)</h4><img src={elaUrl} className="rounded border border-slate-700 w-full aspect-square object-contain bg-black" alt="ELA"/></div>)}
+                            {mfrUrl && (<div><h4 className="text-xs font-medium text-slate-300 mb-2">MFR VOIDS (Noise Density)</h4><img src={mfrUrl} className="rounded border border-slate-700 w-full aspect-square object-contain bg-black" alt="MFR"/></div>)}
+                            {sobelUrl && (<div><h4 className="text-xs font-medium text-slate-300 mb-2">SOBEL EDGES (Ghosting)</h4><img src={sobelUrl} className="rounded border border-slate-700 w-full aspect-square object-contain bg-black" alt="SOBEL"/></div>)}
+                            {lnaUrl && (<div><h4 className="text-xs font-medium text-slate-300 mb-2">LNA ANALYSIS (Variance)</h4><img src={lnaUrl} className="rounded border border-slate-700 w-full aspect-square object-contain bg-black" alt="LNA"/></div>)}
                         </div>
-                      ))}
-                      {!translationResult.blocks && (
-                        <div className="bg-slate-800 p-4 rounded">
-                           <p className="text-slate-300">{translationResult.translated_text}</p>
-                        </div>
-                      )}
-                   </div>
-                </Card>
-              )}
+                      </Card>
+                    )}
+                 </div>
+               )}
 
-              {/* COMPRESSOR RESULT */}
-              {mode === AppMode.COMPRESSOR && compResultUrl && (
-                <Card title="Compression Result" className="animate-fade-in">
-                  <div className="flex items-center justify-around text-center mb-6">
-                     <div>
-                        <p className="text-xs text-slate-500 uppercase">{t.compOrigSize}</p>
-                        <p className="text-lg font-mono text-white">{formatBytes(file?.size || 0)}</p>
-                     </div>
-                     <div className="text-primary-500">➔</div>
-                     <div>
-                        <p className="text-xs text-slate-500 uppercase">{t.compNewSize}</p>
-                        <p className="text-lg font-mono text-green-400">{formatBytes(compSize)}</p>
-                     </div>
-                     <div>
-                        <Badge color="bg-green-900 text-green-300">
-                          -{Math.round((1 - compSize / (file?.size || 1)) * 100)}%
-                        </Badge>
-                     </div>
-                  </div>
-                  <a href={compResultUrl} download={`compressed_${file?.name}`}>
-                    <Button fullWidth variant="primary">{t.compDownload}</Button>
-                  </a>
-                </Card>
-              )}
-
+               {/* OTHER RESULTS */}
+               {modifiedImage && (<Card title="Result"><CompareSlider before={previewUrl!} after={modifiedImage} className="h-[400px] rounded border border-slate-700"/><div className="mt-4"><a href={modifiedImage} download="result.jpg"><Button fullWidth>Download</Button></a></div></Card>)}
+               {mode === AppMode.AI_DETECTOR && aiScanResult && (<Card title="Deep Scan"><div className="text-center py-8"><div className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-4 ${aiScanResult.detected?'bg-red-500/20 text-red-500':'bg-green-500/20 text-green-500'}`}><span className="text-3xl font-bold">{aiScanResult.detected ? "AI" : "REAL"}</span></div><div className="text-sm text-slate-400 mb-2">Probability: {aiScanResult.prob}%</div><h3 className="text-2xl font-bold mb-2">{aiScanResult.detected?t.aiResultPositive:t.aiResultNegative}</h3>{aiScanResult.tool && <div className="inline-block px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-sm mt-2">{aiScanResult.tool}</div>}</div></Card>)}
             </section>
           </div>
         )}
