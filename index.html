@@ -20,12 +20,12 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://pixelgenie.ai/" />
     <meta property="og:title" content="PixelGenie AI - Image Forensics & Deepfake Detection" />
-    <meta property="og:description" content="Analyze images for manipulation, detect deepfakes with ELA heatmaps, and perform AI edits like background removal." />
+    <meta property="og:description" content="Analyze images for manipulation, detect deepfakes, photoshopped images, and digital manipulation." />
     
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:title" content="PixelGenie AI - Image Forensics & Deepfake Detection" />
-    <meta property="twitter:description" content="Analyze images for manipulation, detect deepfakes with ELA heatmaps, and perform AI edits like background removal." />
+    <meta property="twitter:description" content="Analyze images for manipulation, detect deepfakes, photoshopped images, and digital manipulation." />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -81,18 +81,21 @@
         background: #64748b; 
       }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
