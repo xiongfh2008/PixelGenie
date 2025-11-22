@@ -1,0 +1,5 @@
+{
+  "name": "PixelGenie AI",
+  "description": "A professional image analysis and modification tool powered by Gemini 2.5 Flash. Features intelligent object detection, scene description, and AI-driven image editing/generation.",
+  "requestFramePermissions": []
+}

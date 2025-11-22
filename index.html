@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <!-- SEO Primary Meta Tags -->
+    <title>PixelGenie AI - Deepfake Detector & Forensic Image Analysis Tool</title>
+    <meta name="title" content="PixelGenie AI - Deepfake Detector & Forensic Image Analysis Tool">
+    <meta name="description" content="Free online AI image forensic tool. Detect deepfakes, photoshopped images, and digital manipulation using Error Level Analysis (ELA) and Gemini AI. Professional grade photo forensics and AI editing." />
+    <meta name="keywords" content="AI image detector, deepfake detector, ELA analysis, forensic image tools, remove background AI, photo forensics, image manipulation detection, verify image authenticity, photoshop detector, Gemini AI tool" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="PixelGenie AI" />
+    <meta name="language" content="English" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://pixelgenie.ai/" />
+    <meta property="og:title" content="PixelGenie AI - Image Forensics & Deepfake Detection" />
+    <meta property="og:description" content="Analyze images for manipulation, detect deepfakes with ELA heatmaps, and perform AI edits like background removal." />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="PixelGenie AI - Image Forensics & Deepfake Detection" />
+    <meta property="twitter:description" content="Analyze images for manipulation, detect deepfakes with ELA heatmaps, and perform AI edits like background removal." />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                850: '#1e293b',
+                900: '#0f172a',
+                950: '#020617',
+              },
+              primary: {
+                400: '#818cf8',
+                500: '#6366f1',
+                600: '#4f46e5',
+              }
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'fade-in': 'fadeIn 0.5s ease-in-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0f172a;
+        color: #f8fafc;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
