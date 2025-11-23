@@ -270,16 +270,13 @@ const App: React.FC = () => {
   useEffect(() => {
     const detectLang = async () => {
       if (userHasSetLang) return;
-      try {
-        const res = await fetch('https://ipapi.co/json/');
-        const data = await res.json();
-        const countryCode = data.country_code; 
-        const map: Record<string, Language> = {
-          'CN': 'zh', 'HK': 'zh', 'TW': 'zh', 'US': 'en', 'GB': 'en', 'AU': 'en',
-          'ES': 'es', 'MX': 'es', 'JP': 'ja', 'FR': 'fr', 'DE': 'de', 'BR': 'pt', 'PT': 'pt'
-        };
-        if (map[countryCode]) setLang(map[countryCode]);
-      } catch (e) { console.warn("IP Geolocation failed"); }
+      // Replace ipapi with browser detection to save costs and reduce dependencies
+      const userLang = navigator.language || navigator.languages[0];
+      const langCode = userLang.split('-')[0];
+      const map: Record<string, Language> = {
+        'zh': 'zh', 'en': 'en', 'es': 'es', 'ja': 'ja', 'fr': 'fr', 'de': 'de', 'pt': 'pt'
+      };
+      if (map[langCode]) setLang(map[langCode]);
     };
     detectLang();
   }, [userHasSetLang]);
@@ -605,7 +602,24 @@ const App: React.FC = () => {
               {mode === AppMode.EDITOR && (<Card title={t.editorTools}><div className="grid grid-cols-2 gap-4 mb-4"><Button variant="secondary" onClick={()=>runEditor('BG')} loading={loading}>{t.toolRemoveBg}</Button><Button variant="secondary" onClick={()=>runEditor('ENHANCE')} loading={loading}>{t.toolEnhance}</Button><Button variant="secondary" onClick={()=>runEditor('CUTOUT')} loading={loading}>{t.toolCutout}</Button></div><textarea className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-sm" rows={2} placeholder={t.toolPromptPlaceholder} value={editorPrompt} onChange={e=>setEditorPrompt(e.target.value)}/><Button fullWidth onClick={()=>runEditor('CUSTOM')} loading={loading} disabled={!editorPrompt}>Apply</Button></Card>)}
               {mode === AppMode.TRANSLATOR && (<Card title="Settings"><select className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm mb-4 w-full" value={targetTransLang} onChange={e=>setTargetTransLang(e.target.value)}><option>English</option><option>Chinese</option><option>Spanish</option><option>Japanese</option><option>French</option></select><Button fullWidth onClick={runTranslator} loading={loading}>{t.transBtn}</Button></Card>)}
               {mode === AppMode.COMPRESSOR && (<Card title="Settings"><Slider label={t.compQuality} value={compQuality*100} min={10} max={100} step={5} onChange={v=>setCompQuality(v/100)} suffix="%"/><Button fullWidth onClick={runCompressor} loading={loading} className="mt-4">Compress</Button></Card>)}
-              {mode === AppMode.DEWATERMARK && (<Card title={t.navDewatermark}><div className="flex bg-slate-800 p-1 rounded mb-4"><button onClick={()=>setDewatermarkMode('manual')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='manual'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeManual}</button><button onClick={()=>setDewatermarkMode('auto')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='auto'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeAuto}</button></div>{dewatermarkMode==='auto' && <input type="text" className="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-sm mb-4" placeholder={t.wmPlaceholder} value={watermarkText} onChange={e=>setWatermarkText(e.target.value)}/><Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">{t.wmBtn}</Button>}<Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">{t.wmBtn}</Button></Card>)}
+              {mode === AppMode.DEWATERMARK && (
+                <Card title={t.navDewatermark}>
+                  <div className="flex bg-slate-800 p-1 rounded mb-4">
+                    <button onClick={()=>setDewatermarkMode('manual')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='manual'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeManual}</button>
+                    <button onClick={()=>setDewatermarkMode('auto')} className={`flex-1 py-1.5 text-sm rounded ${dewatermarkMode==='auto'?'bg-primary-600 text-white':'text-slate-400'}`}>{t.wmModeAuto}</button>
+                  </div>
+                  {dewatermarkMode === 'auto' && (
+                    <input 
+                      type="text" 
+                      className="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-sm mb-4" 
+                      placeholder={t.wmPlaceholder} 
+                      value={watermarkText} 
+                      onChange={e=>setWatermarkText(e.target.value)}
+                    />
+                  )}
+                  <Button fullWidth onClick={runDewatermark} loading={loading} variant="danger">{t.wmBtn}</Button>
+                </Card>
+              )}
               {mode === AppMode.AI_DETECTOR && (<Card title="Scan"><Button fullWidth variant="primary" onClick={runAiDetector} loading={loading}>{t.aiScanBtn}</Button></Card>)}
             </section>
 
