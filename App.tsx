@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { AppMode, AnalysisData, Language, TranslationData, TextBlock } from './types';
 import { analyzeImage, modifyImage, translateImageText, fileToBase64, scanForAIMetadata, detectTextAndTranslate } from './services/geminiService';
