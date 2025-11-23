@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
+    build: {
+      outDir: 'dist',
+    },
     define: {
       // This replaces process.env.API_KEY in your code with the actual value during build
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
