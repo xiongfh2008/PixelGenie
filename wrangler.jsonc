@@ -1,8 +1,0 @@
-{
-  "name": "pixelgenie-ai",
-  "main": "dist/_worker.js",
-  "compatibility_date": "2024-11-23",
-  "assets": {
-    "directory": "dist"
-  }
-}
