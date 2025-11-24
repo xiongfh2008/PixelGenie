@@ -151,6 +151,7 @@ app.post('/api/analyze-image', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(30000), // 30秒超时
     });
 
     if (!response.ok) {
@@ -233,6 +234,7 @@ app.post('/api/modify-image', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(30000), // 30秒超时
     });
 
     if (!response.ok) {
@@ -332,6 +334,7 @@ app.post('/api/translate-image-text', async (req, res) => {
           maxOutputTokens: 4096
         }
       }),
+      signal: AbortSignal.timeout(30000), // 30秒超时
     });
 
     if (!response.ok) {
