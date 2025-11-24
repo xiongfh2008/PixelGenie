@@ -1,9 +1,33 @@
 
-import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+// Backend API base URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+
+// Helper function to make API requests
+const apiRequest = async (endpoint: string, data: any) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      throw new Error('无法连接到服务器。请确保后端服务器正在运行（npm run dev:server）');
+    }
+    throw error;
+  }
+};
 
 /**
  * Helper to convert File to Base64 string (without data URI prefix)
@@ -146,46 +170,18 @@ export const detectTextAndTranslate = async (
   mimeType: string,
   targetLang: string
 ): Promise<TranslationData> => {
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: {
-      parts: [
-        { inlineData: { mimeType, data: base64 } },
-        { text: `Detect all visible text in this image. Translate each text block to ${targetLang}.
-                 Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.` }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          detected_language: { type: Type.STRING },
-          original_text: { type: Type.STRING, description: "Full original text concatenated" },
-          translated_text: { type: Type.STRING, description: "Full translated text concatenated" },
-          blocks: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                original: { type: Type.STRING },
-                translated: { type: Type.STRING },
-                box_2d: {
-                  type: Type.ARRAY,
-                  items: { type: Type.NUMBER },
-                  description: "ymin, xmin, ymax, xmax"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  try {
+    const result = await apiRequest('/api/detect-text-translate', {
+      base64,
+      mimeType,
+      targetLang
+    });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from translation service");
-  return JSON.parse(text) as TranslationData;
+    return result as TranslationData;
+  } catch (error: any) {
+    console.error("Translation service error:", error);
+    throw error;
+  }
 };
 
 /**
@@ -200,110 +196,20 @@ export const analyzeImage = async (
   lang: Language
 ): Promise<AnalysisData> => {
   try {
-    const langMap: Record<Language, string> = {
-      en: "English",
-      zh: "Simplified Chinese (zh-CN)",
-      es: "Spanish",
-      ja: "Japanese",
-      fr: "French",
-      de: "German",
-      pt: "Portuguese"
-    };
-
-    const targetLang = langMap[lang] || "English";
-    const langInstruction = `The final JSON output values MUST be in ${targetLang}.`;
-
     // Optimize the original image for payload size before sending to LLM
-    // This significantly speeds up the request
     const fastBase64 = await optimizeImageForApi(originalBase64, mimeType);
 
-    const parts: any[] = [
-      { inlineData: { mimeType: "image/jpeg", data: fastBase64 } },
-      { inlineData: { mimeType: 'image/png', data: elaBase64 } }
-    ];
-    if (mfrBase64) parts.push({ inlineData: { mimeType: 'image/png', data: mfrBase64 } });
-
-    parts.push({
-      text: `You are a Lead Digital Forensic Analyst specializing in detecting AI-generated media (Flux, Midjourney v6, Sora) and advanced Photoshop manipulation.
-      
-      **INPUTS**:
-      1. **Original Image**
-      2. **ELA Map** (Rainbow): Error Level Analysis. Shows compression discrepancies.
-      3. **MFR Map** (Grayscale): Noise Analysis. Authentic photos have uniform noise. AI often has 'black voids' (no noise).
-
-      **EXECUTION PROTOCOL**:
-      
-      **PHASE 1: SEMANTIC & PHYSICS CHECK (Primary Detection Method)**
-      *Scan the Original Image closely.*
-      - **AI Artifacts**: Look for glossy/waxy skin texture, perfect symmetry, melded fingers, nonsensical background text, floating objects, or impossible lighting.
-      - **Logic**: Do shadows match the light source? Are reflections correct?
-      - **Verdict Hint**: If it looks "too perfect" or has "dream-like" physics -> Likely AI.
-
-      **PHASE 2: FORENSIC MAP CONFIRMATION**
-      - **ELA (Rainbow)**:
-        - **IGNORE** white/rainbow edges on high-contrast lines (text, sharp borders). This is normal JPEG behavior.
-        - **FLAG** if a specific object (e.g., a face) is purple while the body is blue. This indicates SPLICING.
-      - **MFR (Grayscale)**:
-        - **Authentic**: Uniform grain/static across the whole image.
-        - **AI Generated**: Often shows smooth black areas (voids) where texture should be, lacking camera sensor noise.
-
-      ${langInstruction}
-
-      **DECISION RULES**:
-      1. **AI Generated**: Visually flawless but "plastic" look OR MFR shows lack of noise (black voids) + ELA is uniform.
-      2. **Tampered/Spliced**: ELA shows distinct colored block on an object.
-      3. **Authentic**: Natural imperfections, consistent noise, consistent ELA (except edges).
-
-      Return the analysis in JSON.`
+    const result = await apiRequest('/api/analyze-image', {
+      originalBase64: fastBase64,
+      elaBase64,
+      mfrBase64,
+      mimeType,
+      lang
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts },
-      config: {
-        temperature: 0.1, // Low temperature for factual analysis
-        // Speed Optimization: Reduced budget to 1024. 
-        // Sufficient for "Check 1, Check 2, Verdict" logic without over-thinking.
-        thinkingConfig: { thinkingBudget: 1024 }, 
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            description: { type: Type.STRING },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            objects: { type: Type.ARRAY, items: { type: Type.STRING } },
-            sentiment: { type: Type.STRING },
-            colors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            integrity: {
-              type: Type.OBJECT,
-              properties: {
-                is_suspected_fake: { type: Type.BOOLEAN },
-                confidence_score: { type: Type.NUMBER },
-                reasoning: { type: Type.STRING },
-                methods_analyzed: { type: Type.ARRAY, items: { type: Type.STRING } },
-                ai_generated_probability: { type: Type.NUMBER },
-                ai_analysis: {
-                  type: Type.OBJECT,
-                  properties: {
-                    unnatural_textures: { type: Type.BOOLEAN },
-                    inconsistent_lighting: { type: Type.BOOLEAN },
-                    semantic_inconsistencies: { type: Type.BOOLEAN }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No response from model");
-    return JSON.parse(text) as AnalysisData;
-
-  } catch (error) {
-    console.error("Gemini Analysis Failed:", error);
+    return result as AnalysisData;
+  } catch (error: any) {
+    console.error("Image Analysis Failed:", error);
     throw error;
   }
 };
@@ -317,37 +223,19 @@ export const modifyImage = async (
   prompt: string
 ): Promise<string> => {
   try {
-    const parts: any[] = [];
-
+    let optimizedBase64 = base64;
     if (base64 && mimeType) {
-       const optimizedBase64 = await optimizeImageForApi(base64, mimeType);
-       parts.push({
-         inlineData: {
-           mimeType: 'image/jpeg',
-           data: optimizedBase64,
-         },
-       });
+      optimizedBase64 = await optimizeImageForApi(base64, mimeType);
     }
 
-    parts.push({ text: prompt });
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts },
+    const result = await apiRequest('/api/modify-image', {
+      base64: optimizedBase64,
+      mimeType,
+      prompt
     });
 
-    const candidates = response.candidates;
-    if (candidates && candidates.length > 0) {
-      const parts = candidates[0].content.parts;
-      for (const part of parts) {
-        if (part.inlineData && part.inlineData.data) {
-          return part.inlineData.data;
-        }
-      }
-    }
-    
-    throw new Error("No image generated in response");
-  } catch (error) {
+    return result.imageData;
+  } catch (error: any) {
     console.error("Image Modification Failed:", error);
     throw error;
   }
@@ -358,32 +246,14 @@ export const modifyImage = async (
  */
 export const translateImageText = async (base64: string, mimeType: string, targetLang: string): Promise<TranslationData> => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          { inlineData: { mimeType, data: base64 } },
-          { text: `Perform High-Precision OCR. Transcribe and translate to ${targetLang}.` }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            detected_language: { type: Type.STRING },
-            original_text: { type: Type.STRING },
-            translated_text: { type: Type.STRING },
-          }
-        }
-      }
+    const result = await apiRequest('/api/translate-image-text', {
+      base64,
+      mimeType,
+      targetLang
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response");
-    return JSON.parse(text) as TranslationData;
-
-  } catch (error) {
+    return result as TranslationData;
+  } catch (error: any) {
     console.error("Translation Failed:", error);
     throw error;
   }

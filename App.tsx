@@ -346,9 +346,14 @@ const App: React.FC = () => {
         const result = await analysisPromise;
         setAnalysisResult(result);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error processing image.");
+      const errorMessage = error?.message || "Unknown error occurred";
+      if (errorMessage.includes("API_KEY") || errorMessage.includes("API key")) {
+        alert(`API Key Error: ${errorMessage}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Error processing image: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -402,7 +407,14 @@ const App: React.FC = () => {
       const result = await analysisPromise;
       setAnalysisResult(result);
 
-    } catch (e) { alert("Forensics Failed"); } 
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
+        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Forensics Failed: ${errorMsg}`);
+      }
+    } 
     finally { setLoading(false); setLoadingText(""); }
   };
   
@@ -419,7 +431,14 @@ const App: React.FC = () => {
       if (toolType === 'CUSTOM') prompt = editorPrompt;
       const resultBase64 = await modifyImage(originalBase64, file.type, prompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
-    } catch (e) { alert("Editing Failed"); }
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
+        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Editing Failed: ${errorMsg}`);
+      }
+    }
     finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -461,7 +480,14 @@ const App: React.FC = () => {
         });
       }
       setModifiedImage(canvas.toDataURL('image/jpeg'));
-    } catch (e) { alert("Translation Failed"); } finally { setLoading(false); setLoadingText(""); }
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
+        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Translation Failed: ${errorMsg}`);
+      }
+    } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runLogoGen = async () => {
@@ -470,7 +496,14 @@ const App: React.FC = () => {
       let finalPrompt = file ? `Turn sketch to logo. Style: ${editorPrompt}` : `Generate logo: "${editorPrompt}". Vector, Minimalist.`;
       const resultBase64 = await modifyImage(originalBase64, file?.type || null, finalPrompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
-    } catch (e) { alert("Logo Failed"); } finally { setLoading(false); setLoadingText(""); }
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
+        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Logo Failed: ${errorMsg}`);
+      }
+    } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runCompressor = async () => {
@@ -483,7 +516,10 @@ const App: React.FC = () => {
       const dataUrl = canvas.toDataURL('image/jpeg', compQuality);
       setCompResultUrl(dataUrl);
       setCompSize(Math.round((dataUrl.length - 23) * 3 / 4));
-    } catch (e) { alert("Compression Failed"); } finally { setLoading(false); setLoadingText(""); }
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      alert(`Compression Failed: ${errorMsg}`);
+    } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runDewatermark = async () => {
@@ -503,9 +539,62 @@ const App: React.FC = () => {
         imageToSend = canvas.toDataURL('image/jpeg').split(',')[1];
         prompt = `Look at red mask. Remove it and content under it. Inpaint background. No new objects.`;
       }
-      const resultBase64 = await modifyImage(imageToSend, file.type, prompt);
-      setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
-    } catch (e) { alert("Dewatermark Failed"); } finally { setLoading(false); setLoadingText(""); }
+      
+      // Add retry mechanism for quota exceeded errors
+      let retries = 3;
+      while (retries >= 0) {
+        try {
+          const resultBase64 = await modifyImage(imageToSend, file.type, prompt);
+          setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
+          break;
+        } catch (e: any) {
+          const errorMsg = e?.message || "Unknown error";
+          
+          // Check if it's a quota exceeded error
+          if (errorMsg.includes("quota") || errorMsg.includes("Quota exceeded") || e?.response?.status === 429) {
+            if (retries > 0) {
+              // Wait for a bit before retrying
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              retries--;
+              continue;
+            } else {
+              // No more retries, show specific quota error message
+              const errorResponse = e?.response?.data?.response || {};
+              const quotaInfo = errorResponse?.quotaInfo || {};
+              const metrics = quotaInfo.metrics || 'Rate limit exceeded';
+              const retryAfter = quotaInfo.retryAfter || 'a few seconds';
+              
+              const quotaMessage = `You exceeded your current quota.\n\n` +
+                `Error details: ${metrics}\n` +
+                `Please wait ${retryAfter} before trying again.\n\n` +
+                `To resolve this issue:\n` +
+                `1. Check your plan and billing details at https://aistudio.google.com/\n` +
+                `2. Learn more about rate limits at https://ai.google.dev/gemini-api/docs/rate.limits\n` +
+                `3. Monitor your usage at https://ai.google.dev/usage?tab=rate-limit\n\n` +
+                `Consider upgrading your plan if you frequently hit rate limits.`;
+              alert(`Dewatermark Failed: ${quotaMessage}`);
+              break;
+            }
+          } else {
+            // Not a quota error, show regular error handling
+            const errorDetails = e?.response?.data?.details || "";
+            const errorResponse = e?.response?.data?.response || "";
+            
+            // Create a more detailed error message
+            let fullErrorMessage = `Dewatermark Failed: ${errorMsg}`;
+            if (errorDetails) {
+              fullErrorMessage += `\n\nDetails: ${errorDetails}`;
+            }
+            if (errorResponse) {
+              fullErrorMessage += `\n\nResponse: ${JSON.stringify(errorResponse, null, 2)}`;
+            }
+            
+            alert(fullErrorMessage);
+            break;
+          }
+        }
+      }
+    } finally { setLoading(false); setLoadingText(""); }
   };
 
   const runAiDetector = async () => {
@@ -515,11 +604,24 @@ const App: React.FC = () => {
       const local = await scanForAIMetadata(file);
       if (local.detected) setAiScanResult({ detected: true, tool: local.tool, prob: 100 });
       else {
-        const analysis = await analyzeImage(originalBase64, "", null, file.type, lang);
+        // Generate ELA and MFR data for AI detection
+        const [ela, mfr] = await Promise.all([
+          generateELA(file),
+          generateMFR(file)
+        ]);
+        
+        const analysis = await analyzeImage(originalBase64, ela, mfr, file.type, lang);
         const prob = analysis.integrity.ai_generated_probability || (analysis.integrity.is_suspected_fake ? 80 : 10);
         setAiScanResult({ detected: prob > 50, tool: "Unknown AI Model", prob });
       }
-    } catch (e) { alert("Scan Failed"); } finally { setLoading(false); setLoadingText(""); }
+    } catch (e: any) { 
+      const errorMsg = e?.message || "Unknown error";
+      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
+        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+      } else {
+        alert(`Scan Failed: ${errorMsg}`);
+      }
+    } finally { setLoading(false); setLoadingText(""); }
   };
 
   const handleBrushDraw = (dataUrl: string) => setManualMaskBase64(dataUrl);
