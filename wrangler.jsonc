@@ -4,7 +4,8 @@
   "compatibility_date": "2024-11-23",
   "assets": {
     "directory": "dist",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "exclude": ["_worker.js"]
   },
   // Add build configuration to handle rollup dependencies
   "build": {
