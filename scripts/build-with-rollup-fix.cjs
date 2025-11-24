@@ -10,6 +10,10 @@ try {
   console.log('Running TypeScript compilation and Vite build...');
   execSync('tsc && vite build', { stdio: 'inherit' });
   
+  // Create the worker file after successful build
+  console.log('Creating Cloudflare Worker file...');
+  execSync('node scripts/create-worker.js', { stdio: 'inherit' });
+  
   console.log('Build completed successfully!');
 } catch (error) {
   console.error('Build failed:', error.message);
