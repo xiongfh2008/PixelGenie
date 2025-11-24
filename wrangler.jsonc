@@ -5,5 +5,11 @@
   "assets": {
     "directory": "dist",
     "binding": "ASSETS"
+  },
+  // Add build configuration to handle rollup dependencies
+  "build": {
+    "command": "npm run build",
+    "cwd": ".",
+    "watch_dir": "./src"
   }
 }
