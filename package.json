@@ -9,7 +9,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "prebuild": "npm install --prefer-online --platform=all",
     "build": "node scripts/build-with-rollup-fix.cjs",
-    "deploy": "npm install --prefer-online --platform=all && npm run build && node scripts/create-worker.js && wrangler deploy",
+    "deploy": "npm install --prefer-online --platform=all && npm run build && wrangler pages deploy dist",
     "preview": "vite preview"
   },
   "dependencies": {

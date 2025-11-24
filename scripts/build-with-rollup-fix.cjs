@@ -45,17 +45,6 @@ try {
   console.log('Running TypeScript compilation and Vite build...');
   execSync('tsc && vite build', { stdio: 'inherit' });
   
-  // Create the worker file directly in this script to avoid module issues
-  console.log('Creating Cloudflare Worker file...');
-  const distDir = path.join(__dirname, '../dist');
-  if (!fs.existsSync(distDir)) {
-    fs.mkdirSync(distDir, { recursive: true });
-  }
-  
-  const workerPath = path.join(distDir, '_worker.js');
-  fs.writeFileSync(workerPath, workerScript);
-  
-  console.log('_worker.js created successfully in dist folder');
   console.log('Build completed successfully!');
 } catch (error) {
   console.error('Build failed:', error.message);
