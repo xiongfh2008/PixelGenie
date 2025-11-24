@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 // Script to handle rollup platform-specific dependencies correctly
-import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+const { execSync } = require('child_process');
 
 console.log('Running build with Rollup platform fix...');
 
