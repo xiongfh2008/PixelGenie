@@ -14,21 +14,21 @@ const workerScript = `export default {
     const pathname = url.pathname;
     
     // Try to serve static assets first
-    if (env.ASSETS) {
+    if (env.STATIC_ASSETS) {
       try {
-        return await env.ASSETS.fetch(request);
+        return await env.STATIC_ASSETS.fetch(request);
       } catch (e) {
         // If asset not found, continue to fallback
       }
     }
     
     // Fallback to serving index.html for client-side routing
-    if (pathname !== '/' && !pathname.match(/\\.[^/]+$/)) {
+    if (pathname !== '/' && !pathname.match(/\.[^/]+$/)) {
       const indexUrl = new URL('/', url.origin);
       const indexRequest = new Request(indexUrl, request);
-      if (env.ASSETS) {
+      if (env.STATIC_ASSETS) {
         try {
-          return await env.ASSETS.fetch(indexRequest);
+          return await env.STATIC_ASSETS.fetch(indexRequest);
         } catch (e) {
           // Continue to minimal fallback
         }

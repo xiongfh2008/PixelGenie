@@ -2,10 +2,10 @@
   "name": "pixelgenie",
   "main": "dist/_worker.js",
   "compatibility_date": "2024-11-23",
+  "pages_build_output_dir": "dist",
   "assets": {
     "directory": "dist",
-    "binding": "ASSETS",
-    "exclude": ["_worker.js"]
+    "binding": "STATIC_ASSETS"
   },
   // Add build configuration to handle rollup dependencies
   "build": {
