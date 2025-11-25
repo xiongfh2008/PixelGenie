@@ -3,6 +3,15 @@ import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import {
+  HUGGINGFACE_MODELS,
+  detectAIGenerated,
+  editImage,
+  removeWatermark,
+  translateImageText,
+  generateLogo,
+  analyzeCompression
+} from './huggingface-config.js';
 
 // Load environment variables from server/.env
 import { fileURLToPath } from 'url';
@@ -27,7 +36,10 @@ const getApiKeys = () => {
     google: process.env.GOOGLE_API_KEY,
     baidu: process.env.BAIDU_API_KEY,
     xunfei: process.env.XUNFEI_API_KEY,
-    huggingface: process.env.HUGGINGFACE_API_KEY
+    huggingface: process.env.HUGGINGFACE_API_KEY,
+    tencent: process.env.TENCENT_API_KEY,
+    alibaba: process.env.ALIBABA_API_KEY,
+    deepseek: process.env.DEEPSEEK_API_KEY
   };
   
   // Check if at least one API key is available
@@ -36,12 +48,16 @@ const getApiKeys = () => {
   if (availableKeys.length === 0) {
     console.error('❌ No API keys found in server environment variables');
     console.error('📁 Expected location: server/.env');
-    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY');
+    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY, TENCENT_API_KEY, ALIBABA_API_KEY, DEEPSEEK_API_KEY');
     console.error('📋 Current environment variables:');
     console.error(`   GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   BAIDU_API_KEY: ${process.env.BAIDU_API_KEY ? 'Set' : 'Not set'}`);
     console.error(`   XUNFEI_API_KEY: ${process.env.XUNFEI_API_KEY ? 'Set' : 'Not set'}`);
     console.error(`   XUNFEI_APP_ID: ${process.env.XUNFEI_APP_ID ? 'Set' : 'Not set'}`);
     console.error(`   XUNFEI_API_SECRET: ${process.env.XUNFEI_API_SECRET ? 'Set' : 'Not set'}`);
+    console.error(`   TENCENT_API_KEY: ${process.env.TENCENT_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   ALIBABA_API_KEY: ${process.env.ALIBABA_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? 'Set' : 'Not set'}`);
     throw new Error('No API keys configured. Please check server/.env file.');
   }
   
@@ -65,8 +81,8 @@ const selectApiProvider = () => {
   const apiKeys = getApiKeys();
   const availableProviders = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
   
-  // Priority: Google > Baidu > Xunfei > HuggingFace
-  for (const provider of ['google', 'baidu', 'xunfei', 'huggingface']) {
+  // Priority: Google > Baidu > Tencent > Alibaba > Xunfei > DeepSeek > HuggingFace
+  for (const provider of ['google', 'baidu', 'tencent', 'alibaba', 'xunfei', 'deepseek', 'huggingface']) {
     if (apiKeys[provider]) {
       return provider;
     }
@@ -227,15 +243,99 @@ app.post('/api/analyze-image', async (req, res) => {
           };
           break;
           
-        case 'huggingface':
-          // HuggingFace API endpoint for BLIP-2 model
-          url = 'https://api-inference.huggingface.co/models/Salesforce/blip2-flan-t5-xl';
+        case 'tencent':
+          // Tencent Hunyuan API endpoint
+          url = 'https://hunyuan.cloud.tencent.com/hyllm/v1/chat/completions';
           requestBody = {
-            inputs: {
-              image: `data:${mimeType};base64,${base64}`,
-              question: parts.filter(p => p.text).map(p => p.text).join(' ')
+            messages: [
+              {
+                role: 'user',
+                content: parts.map(part => {
+                  if (part.text) return { type: 'text', text: part.text };
+                  if (part.inlineData) return { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } };
+                  return null;
+                }).filter(Boolean)
+              }
+            ],
+            stream: false
+          };
+          break;
+          
+        case 'alibaba':
+          // Alibaba Tongyi Qianwen API endpoint
+          url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+          requestBody = {
+            model: 'qwen-vl-plus',
+            input: {
+              messages: [
+                {
+                  role: 'user',
+                  content: parts.map(part => {
+                    if (part.text) return { text: part.text };
+                    if (part.inlineData) return { image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` };
+                    return null;
+                  }).filter(Boolean)
+                }
+              ]
+            },
+            parameters: {
+              temperature: 0.1,
+              max_tokens: 4096
             }
           };
+          break;
+          
+        case 'deepseek':
+          // DeepSeek API endpoint
+          url = 'https://api.deepseek.com/v1/chat/completions';
+          requestBody = {
+            model: 'deepseek-chat',
+            messages: [
+              {
+                role: 'user',
+                content: parts.map(part => {
+                  if (part.text) return { type: 'text', text: part.text };
+                  if (part.inlineData) return { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } };
+                  return null;
+                }).filter(Boolean)
+              }
+            ],
+            temperature: 0.1,
+            max_tokens: 4096
+          };
+          break;
+          
+        case 'huggingface':
+          // HuggingFace API endpoint for AI detection
+          try {
+            const apiKeys = getApiKeys();
+            const result = await detectAIGenerated(originalBase64, apiKeys.huggingface);
+            
+            // Transform HuggingFace response to match expected format
+            const transformedResult = {
+              description: 'AI detection analysis using HuggingFace model',
+              tags: ['ai-detection', 'huggingface'],
+              objects: [],
+              sentiment: 'neutral',
+              colors: [],
+              integrity: {
+                is_suspected_fake: result.score > 0.7,
+                confidence_score: result.score || 0.5,
+                reasoning: 'Analyzed using HuggingFace AI detection model',
+                methods_analyzed: ['huggingface-ai-detection'],
+                ai_generated_probability: result.score || 0.5,
+                ai_analysis: {
+                  model: HUGGINGFACE_MODELS.aiDetection.model,
+                  confidence: result.score || 0.5
+                }
+              }
+            };
+            
+            return res.json(transformedResult);
+          } catch (error) {
+            console.error('HuggingFace AI detection error:', error);
+            throw new Error(`HuggingFace AI detection failed: ${error.message}`);
+          }
           break;
           
         default:
@@ -322,6 +422,11 @@ app.post('/api/modify-image', async (req, res) => {
     switch (provider) {
       case 'google':
         url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKeys.google}`;
+        requestBody = {
+          contents: [{
+            parts: parts
+          }]
+        };
         break;
         
       case 'baidu':
@@ -339,6 +444,24 @@ app.post('/api/modify-image', async (req, res) => {
           ],
           stream: false
         };
+        break;
+        
+      case 'huggingface':
+        // HuggingFace API endpoint for image editing
+        try {
+          const apiKeys = getApiKeys();
+          const result = await editImage(base64, prompt, apiKeys.huggingface);
+          
+          // Transform HuggingFace response to match expected format
+          if (result.generated_image) {
+            return res.json({ imageData: result.generated_image });
+          } else {
+            throw new Error('No image generated by HuggingFace model');
+          }
+        } catch (error) {
+          console.error('HuggingFace image editing error:', error);
+          throw new Error(`HuggingFace image editing failed: ${error.message}`);
+        }
         break;
         
       default:
@@ -467,6 +590,31 @@ app.post('/api/translate-image-text', async (req, res) => {
         };
         break;
         
+      case 'huggingface':
+        // HuggingFace API endpoint for visual translation
+        try {
+          const apiKeys = getApiKeys();
+          const result = await translateImageText(base64, targetLang, apiKeys.huggingface);
+          
+          // Transform HuggingFace response to match expected format
+          const transformedResult = {
+            detected_language: 'auto',
+            original_text: result.text || '',
+            translated_text: result.translated_text || result.text || '',
+            blocks: [{
+              original: result.text || '',
+              translated: result.translated_text || result.text || '',
+              box_2d: [0, 0, 1000, 1000]
+            }]
+          };
+          
+          return res.json(transformedResult);
+        } catch (error) {
+          console.error('HuggingFace visual translation error:', error);
+          throw new Error(`HuggingFace visual translation failed: ${error.message}`);
+        }
+        break;
+        
       default:
         throw new Error(`Image text translation not supported for provider: ${provider}`);
     }
@@ -548,6 +696,31 @@ app.post('/api/detect-text-translate', async (req, res) => {
           ],
           stream: false
         };
+        break;
+        
+      case 'huggingface':
+        // HuggingFace API endpoint for text detection and translation
+        try {
+          const apiKeys = getApiKeys();
+          const result = await translateImageText(base64, targetLang, apiKeys.huggingface);
+          
+          // Transform HuggingFace response to match expected format
+          const transformedResult = {
+            detected_language: 'auto',
+            original_text: result.text || '',
+            translated_text: result.translated_text || result.text || '',
+            blocks: [{
+              original: result.text || '',
+              translated: result.translated_text || result.text || '',
+              box_2d: [0, 0, 1000, 1000]
+            }]
+          };
+          
+          return res.json(transformedResult);
+        } catch (error) {
+          console.error('HuggingFace text detection error:', error);
+          throw new Error(`HuggingFace text detection failed: ${error.message}`);
+        }
         break;
         
       default:
