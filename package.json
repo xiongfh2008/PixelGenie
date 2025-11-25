@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:server": "node --experimental-modules server/index.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "test:cloudflare": "node server/test-cloudflare.js",
+    "agree:cloudflare": "node server/agree-cloudflare-model.js",
     "prebuild": "npm install --prefer-online --platform=all",
     "build": "node scripts/build-with-rollup-fix.cjs",
     "deploy": "npm install --prefer-online --platform=all && npm run build && wrangler pages deploy dist",

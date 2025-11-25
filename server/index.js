@@ -39,7 +39,8 @@ const getApiKeys = () => {
     huggingface: process.env.HUGGINGFACE_API_KEY,
     tencent: process.env.TENCENT_API_KEY,
     alibaba: process.env.ALIBABA_API_KEY,
-    deepseek: process.env.DEEPSEEK_API_KEY
+    deepseek: process.env.DEEPSEEK_API_KEY,
+    cloudflare: process.env.CLOUDFLARE_API_TOKEN
   };
   
   // Check if at least one API key is available
@@ -48,7 +49,7 @@ const getApiKeys = () => {
   if (availableKeys.length === 0) {
     console.error('❌ No API keys found in server environment variables');
     console.error('📁 Expected location: server/.env');
-    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY, TENCENT_API_KEY, ALIBABA_API_KEY, DEEPSEEK_API_KEY');
+    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY, TENCENT_API_KEY, ALIBABA_API_KEY, DEEPSEEK_API_KEY, CLOUDFLARE_API_TOKEN');
     console.error('📋 Current environment variables:');
     console.error(`   GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? 'Set' : 'Not set'}`);
     console.error(`   BAIDU_API_KEY: ${process.env.BAIDU_API_KEY ? 'Set' : 'Not set'}`);
@@ -58,6 +59,8 @@ const getApiKeys = () => {
     console.error(`   TENCENT_API_KEY: ${process.env.TENCENT_API_KEY ? 'Set' : 'Not set'}`);
     console.error(`   ALIBABA_API_KEY: ${process.env.ALIBABA_API_KEY ? 'Set' : 'Not set'}`);
     console.error(`   DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   CLOUDFLARE_API_TOKEN: ${process.env.CLOUDFLARE_API_TOKEN ? 'Set' : 'Not set'}`);
+    console.error(`   CLOUDFLARE_ACCOUNT_ID: ${process.env.CLOUDFLARE_ACCOUNT_ID ? 'Set' : 'Not set'}`);
     throw new Error('No API keys configured. Please check server/.env file.');
   }
   
@@ -84,7 +87,8 @@ let apiHealthStatus = {
   google: { healthy: true, lastCheck: Date.now(), errorCount: 0 },
   baidu: { healthy: true, lastCheck: Date.now(), errorCount: 0 },
   tencent: { healthy: true, lastCheck: Date.now(), errorCount: 0 },
-  alibaba: { healthy: true, lastCheck: Date.now(), errorCount: 0 }
+  alibaba: { healthy: true, lastCheck: Date.now(), errorCount: 0 },
+  cloudflare: { healthy: true, lastCheck: Date.now(), errorCount: 0 }
 };
 
 // API健康检查函数
@@ -106,6 +110,24 @@ const checkApiHealth = async (provider, apiKey) => {
         // 对于Google，我们不进行实际的API调用作为健康检查，避免消耗配额
         // 只有在实际调用时出现错误才标记为不健康
         return true;
+        
+      case 'cloudflare':
+        // Cloudflare Workers AI 健康检查
+        if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
+          console.warn('Cloudflare Account ID not configured');
+          return false;
+        }
+        const cfResponse = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/models`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        return cfResponse.ok;
         
       case 'xunfei':
       case 'deepseek':
@@ -191,7 +213,7 @@ const selectApiProvider = () => {
   // 第一组：主用提供商（优先级高）
   // 第二组：备用提供商（免费或成本较低）
   const primaryProviders = ['google', 'xunfei'];
-  const backupProviders = ['huggingface', 'deepseek'];
+  const backupProviders = ['cloudflare', 'huggingface', 'deepseek'];
   const fallbackProviders = ['baidu', 'tencent', 'alibaba'];
   
   // 过滤掉已检测到密钥泄露的提供商
@@ -370,6 +392,32 @@ app.post('/api/analyze-image', async (req, res) => {
           };
           break;
           
+        case 'cloudflare':
+          // Cloudflare Workers AI - using LLaVA 1.5 7B model for image analysis
+          url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+          requestBody = {
+            messages: [
+              {
+                role: 'user',
+                content: parts.map(part => {
+                  if (part.text) return { type: 'text', text: part.text };
+                  if (part.inlineData) {
+                    // Cloudflare expects base64 image in a specific format
+                    return { 
+                      type: 'image_url', 
+                      image_url: { 
+                        url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` 
+                      } 
+                    };
+                  }
+                  return null;
+                }).filter(Boolean)
+              }
+            ],
+            max_tokens: 4096
+          };
+          break;
+          
         case 'baidu':
           // Baidu API endpoint (placeholder - need actual endpoint)
           url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
@@ -502,10 +550,12 @@ app.post('/api/analyze-image', async (req, res) => {
       }
 
     try {
-    // Prepare headers - Google API uses X-goog-api-key header
+    // Prepare headers - Different providers use different auth methods
     const headers = { 'Content-Type': 'application/json' };
     if (provider === 'google') {
       headers['X-goog-api-key'] = apiKeys.google;
+    } else if (provider === 'cloudflare') {
+      headers['Authorization'] = `Bearer ${apiKeys.cloudflare}`;
     }
 
     let response;
@@ -558,11 +608,21 @@ app.post('/api/analyze-image', async (req, res) => {
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    // Extract text based on provider response format
+    let text;
+    if (provider === 'google') {
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else if (provider === 'cloudflare') {
+      text = data.result?.response || data.result?.content;
+    } else {
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
     
     if (!text) {
       // 标记API为不健康
       updateApiHealth(provider, false, 'No response from model');
+      console.error('Full response data:', JSON.stringify(data, null, 2));
       return res.status(500).json({ error: 'No response from model' });
     }
 
@@ -639,6 +699,31 @@ app.post('/api/modify-image', async (req, res) => {
         };
         break;
         
+      case 'cloudflare':
+        // Cloudflare Workers AI - using LLaVA 1.5 7B model
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: parts.map(part => {
+                if (part.text) return { type: 'text', text: part.text };
+                if (part.inlineData) {
+                  return { 
+                    type: 'image_url', 
+                    image_url: { 
+                      url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` 
+                    } 
+                  };
+                }
+                return null;
+              }).filter(Boolean)
+            }
+          ],
+          max_tokens: 4096
+        };
+        break;
+        
       case 'baidu':
         url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
         requestBody = {
@@ -679,10 +764,12 @@ app.post('/api/modify-image', async (req, res) => {
     }
 
     try {
-    // Prepare headers - Google API uses X-goog-api-key header
+    // Prepare headers - Different providers use different auth methods
     const headers = { 'Content-Type': 'application/json' };
     if (provider === 'google') {
       headers['X-goog-api-key'] = apiKeys.google;
+    } else if (provider === 'cloudflare') {
+      headers['Authorization'] = `Bearer ${apiKeys.cloudflare}`;
     }
 
     let response;
@@ -844,6 +931,17 @@ app.post('/api/translate-image-text', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
 
+    // Prepare parts for API request
+    const parts = [
+      {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64
+        }
+      },
+      { text: `Extract all text from this image and translate it to ${targetLang}. Return the result as JSON with the following structure: { "detected_language": "language_code", "original_text": "original text", "translated_text": "translated text", "blocks": [{ "original": "text", "translated": "text", "box_2d": [x, y, width, height] }] }` }
+    ];
+
     // Multi-API provider support
     const apiKeys = getApiKeys();
     const provider = selectApiProvider();
@@ -859,6 +957,31 @@ app.post('/api/translate-image-text', async (req, res) => {
             temperature: 0.4,
             maxOutputTokens: 4096
           }
+        };
+        break;
+        
+      case 'cloudflare':
+        // Cloudflare Workers AI - using LLaVA 1.5 7B model
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: parts.map(part => {
+                if (part.text) return { type: 'text', text: part.text };
+                if (part.inlineData) {
+                  return { 
+                    type: 'image_url', 
+                    image_url: { 
+                      url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` 
+                    } 
+                  };
+                }
+                return null;
+              }).filter(Boolean)
+            }
+          ],
+          max_tokens: 4096
         };
         break;
         
@@ -909,10 +1032,12 @@ app.post('/api/translate-image-text', async (req, res) => {
     }
     
     try {
-    // Prepare headers - Google API uses X-goog-api-key header
+    // Prepare headers - Different providers use different auth methods
     const headers = { 'Content-Type': 'application/json' };
     if (provider === 'google') {
       headers['X-goog-api-key'] = apiKeys.google;
+    } else if (provider === 'cloudflare') {
+      headers['Authorization'] = `Bearer ${apiKeys.cloudflare}`;
     }
 
     const response = await fetch(url, {
@@ -1023,6 +1148,23 @@ app.post('/api/detect-text-translate', async (req, res) => {
         };
         break;
         
+      case 'cloudflare':
+        // Cloudflare Workers AI - using LLaVA 1.5 7B model
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+                { type: 'text', text: `Detect all visible text in this image. Translate each text block to ${targetLang}. Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block. Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text, and blocks.` }
+              ]
+            }
+          ],
+          max_tokens: 4096
+        };
+        break;
+        
       case 'baidu':
         url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
         requestBody = {
@@ -1069,10 +1211,12 @@ app.post('/api/detect-text-translate', async (req, res) => {
     }
     
     try {
-    // Prepare headers - Google API uses X-goog-api-key header
+    // Prepare headers - Different providers use different auth methods
     const headers = { 'Content-Type': 'application/json' };
     if (provider === 'google') {
       headers['X-goog-api-key'] = apiKeys.google;
+    } else if (provider === 'cloudflare') {
+      headers['Authorization'] = `Bearer ${apiKeys.cloudflare}`;
     }
 
     const response = await fetch(url, {
