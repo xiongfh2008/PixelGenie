@@ -21,16 +21,58 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Get API Key
-const getApiKey = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error('❌ API_KEY is not set in server environment variables');
+// Get API Keys
+const getApiKeys = () => {
+  const apiKeys = {
+    google: process.env.GOOGLE_API_KEY,
+    baidu: process.env.BAIDU_API_KEY,
+    xunfei: process.env.XUNFEI_API_KEY,
+    huggingface: process.env.HUGGINGFACE_API_KEY
+  };
+  
+  // Check if at least one API key is available
+  const availableKeys = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
+  
+  if (availableKeys.length === 0) {
+    console.error('❌ No API keys found in server environment variables');
     console.error('📁 Expected location: server/.env');
-    console.error('💡 Please create server/.env file with: API_KEY=your_api_key_here');
-    throw new Error('API_KEY is not set in server environment variables. Please check server/.env file.');
+    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY');
+    console.error('📋 Current environment variables:');
+    console.error(`   GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   XUNFEI_API_KEY: ${process.env.XUNFEI_API_KEY ? 'Set' : 'Not set'}`);
+    console.error(`   XUNFEI_APP_ID: ${process.env.XUNFEI_APP_ID ? 'Set' : 'Not set'}`);
+    console.error(`   XUNFEI_API_SECRET: ${process.env.XUNFEI_API_SECRET ? 'Set' : 'Not set'}`);
+    throw new Error('No API keys configured. Please check server/.env file.');
   }
-  return apiKey;
+  
+  console.log(`✅ Available API keys: ${availableKeys.join(', ')}`);
+  
+  // Log Xunfei configuration status
+  if (process.env.XUNFEI_API_KEY && process.env.XUNFEI_APP_ID && process.env.XUNFEI_API_SECRET) {
+    console.log('✅ Xunfei Spark API configuration complete');
+  } else if (process.env.XUNFEI_API_KEY || process.env.XUNFEI_APP_ID || process.env.XUNFEI_API_SECRET) {
+    console.warn('⚠️ Xunfei Spark API configuration incomplete');
+    console.warn(`   AppID: ${process.env.XUNFEI_APP_ID ? 'Set' : 'Missing'}`);
+    console.warn(`   API Key: ${process.env.XUNFEI_API_KEY ? 'Set' : 'Missing'}`);
+    console.warn(`   API Secret: ${process.env.XUNFEI_API_SECRET ? 'Set' : 'Missing'}`);
+  }
+  
+  return apiKeys;
+};
+
+// API Provider Selection
+const selectApiProvider = () => {
+  const apiKeys = getApiKeys();
+  const availableProviders = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
+  
+  // Priority: Google > Baidu > Xunfei > HuggingFace
+  for (const provider of ['google', 'baidu', 'xunfei', 'huggingface']) {
+    if (apiKeys[provider]) {
+      return provider;
+    }
+  }
+  
+  throw new Error('No available API providers');
 };
 
 // Root endpoint
@@ -135,17 +177,70 @@ app.post('/api/analyze-image', async (req, res) => {
 
       IMPORTANT: Return ONLY a valid JSON object with these exact keys: description, tags, objects, sentiment, colors, and integrity. The integrity object must contain: is_suspected_fake, confidence_score, reasoning, methods_analyzed, ai_generated_probability, and ai_analysis. Do NOT include any text before or after the JSON.` });
   
-      // Use REST API with v1 endpoint and gemini-flash-latest model
-      const apiKey = getApiKey();
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+      // Multi-API provider support
+      const apiKeys = getApiKeys();
+      const provider = selectApiProvider();
       
-      const requestBody = {
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4096
-        }
-      };
+      let url, requestBody;
+      
+      switch (provider) {
+        case 'google':
+          url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKeys.google}`;
+          requestBody = {
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 4096
+            }
+          };
+          break;
+          
+        case 'baidu':
+          // Baidu API endpoint (placeholder - need actual endpoint)
+          url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
+          requestBody = {
+            messages: [
+              {
+                role: 'user',
+                content: parts.map(part => {
+                  if (part.text) return { type: 'text', text: part.text };
+                  if (part.inlineData) return { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } };
+                  return null;
+                }).filter(Boolean)
+              }
+            ],
+            stream: false
+          };
+          break;
+          
+        case 'xunfei':
+          // Xunfei API endpoint (placeholder - need actual endpoint)
+          url = 'https://spark-api.xf-yun.com/v1.1/chat';
+          requestBody = {
+            header: { app_id: apiKeys.xunfei },
+            parameter: { chat: { domain: 'general', temperature: 0.1, max_tokens: 4096 } },
+            payload: {
+              message: {
+                text: parts.filter(p => p.text).map(p => ({ role: 'user', content: p.text }))
+              }
+            }
+          };
+          break;
+          
+        case 'huggingface':
+          // HuggingFace API endpoint for BLIP-2 model
+          url = 'https://api-inference.huggingface.co/models/Salesforce/blip2-flan-t5-xl';
+          requestBody = {
+            inputs: {
+              image: `data:${mimeType};base64,${base64}`,
+              question: parts.filter(p => p.text).map(p => p.text).join(' ')
+            }
+          };
+          break;
+          
+        default:
+          throw new Error(`Unsupported API provider: ${provider}`);
+      }
 
     const response = await fetch(url, {
       method: 'POST',
@@ -218,17 +313,37 @@ app.post('/api/modify-image', async (req, res) => {
     }
     parts.push({ text: prompt });
 
-    const apiKey = getApiKey();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+    // Multi-API provider support
+    const apiKeys = getApiKeys();
+    const provider = selectApiProvider();
     
-    const requestBody = {
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json"
-      }
-    };
+    let url, requestBody;
+    
+    switch (provider) {
+      case 'google':
+        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKeys.google}`;
+        break;
+        
+      case 'baidu':
+        url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: parts.map(part => {
+                if (part.text) return { type: 'text', text: part.text };
+                if (part.inlineData) return { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } };
+                return null;
+              }).filter(Boolean)
+            }
+          ],
+          stream: false
+        };
+        break;
+        
+      default:
+        throw new Error(`Image modification not supported for provider: ${provider}`);
+    }
 
     const response = await fetch(url, {
       method: 'POST',
@@ -316,24 +431,50 @@ app.post('/api/translate-image-text', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    const apiKey = getApiKey();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // Multi-API provider support
+    const apiKeys = getApiKeys();
+    const provider = selectApiProvider();
+    
+    let url, requestBody;
+    
+    switch (provider) {
+      case 'google':
+        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKeys.google}`;
+        requestBody = {
+          contents: [{ parts }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json"
+          }
+        };
+        break;
+        
+      case 'baidu':
+        url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: parts.map(part => {
+                if (part.text) return { type: 'text', text: part.text };
+                if (part.inlineData) return { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } };
+                return null;
+              }).filter(Boolean)
+            }
+          ],
+          stream: false
+        };
+        break;
+        
+      default:
+        throw new Error(`Image text translation not supported for provider: ${provider}`);
+    }
     
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inlineData: { mimeType, data: base64 } },
-            { text: `Perform High-Precision OCR. Transcribe and translate to ${targetLang}. IMPORTANT: Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text. Do NOT include any text before or after the JSON.` }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4096
-        }
-      }),
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(30000), // 30秒超时
     });
 
@@ -368,26 +509,55 @@ app.post('/api/detect-text-translate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    const apiKey = getApiKey();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // Multi-API provider support
+    const apiKeys = getApiKeys();
+    const provider = selectApiProvider();
+    
+    let url, requestBody;
+    
+    switch (provider) {
+      case 'google':
+        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKeys.google}`;
+        requestBody = {
+          contents: [{
+            parts: [
+              { inlineData: { mimeType, data: base64 } },
+              { text: `Detect all visible text in this image. Translate each text block to ${targetLang}.
+       Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.
+       IMPORTANT: Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text, and blocks. The blocks array should contain objects with original, translated, and box_2d properties. Do NOT include any text before or after the JSON.` }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096
+          }
+        };
+        break;
+        
+      case 'baidu':
+        url = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions';
+        requestBody = {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+                { type: 'text', text: `Detect all visible text in this image. Translate each text block to ${targetLang}. Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.` }
+              ]
+            }
+          ],
+          stream: false
+        };
+        break;
+        
+      default:
+        throw new Error(`Text detection and translation not supported for provider: ${provider}`);
+    }
     
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inlineData: { mimeType, data: base64 } },
-            { text: `Detect all visible text in this image. Translate each text block to ${targetLang}.
-       Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.
-       IMPORTANT: Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text, and blocks. The blocks array should contain objects with original, translated, and box_2d properties. Do NOT include any text before or after the JSON.` }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 4096
-        }
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -415,7 +585,16 @@ app.post('/api/detect-text-translate', async (req, res) => {
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`✅ API Key loaded: ${process.env.API_KEY ? process.env.API_KEY.substring(0, 6) + '...' : 'Not found'}`);
+  
+  // Check available API keys
+  try {
+    const apiKeys = getApiKeys();
+    const availableProviders = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
+    console.log(`✅ Available API providers: ${availableProviders.join(', ')}`);
+    console.log(`🔑 Active provider: ${selectApiProvider()}`);
+  } catch (error) {
+    console.error('⚠️ API Key Warning:', error.message);
+  }
 });
 
 export default app;
