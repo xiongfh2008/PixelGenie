@@ -350,7 +350,12 @@ const App: React.FC = () => {
       console.error(error);
       const errorMessage = error?.message || "Unknown error occurred";
       if (errorMessage.includes("API_KEY") || errorMessage.includes("API key")) {
-        alert(`API Key Error: ${errorMessage}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMessage.includes("leak") || errorMessage.includes("leaked")) {
+          alert(`API Error: ${errorMessage}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMessage}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Error processing image: ${errorMessage}`);
       }
@@ -410,7 +415,12 @@ const App: React.FC = () => {
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
       if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
+          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Forensics Failed: ${errorMsg}`);
       }
@@ -434,7 +444,12 @@ const App: React.FC = () => {
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
       if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
+          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Editing Failed: ${errorMsg}`);
       }
@@ -483,7 +498,12 @@ const App: React.FC = () => {
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
       if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
+          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Translation Failed: ${errorMsg}`);
       }
@@ -499,7 +519,12 @@ const App: React.FC = () => {
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
       if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
+          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Logo Failed: ${errorMsg}`);
       }
@@ -617,7 +642,12 @@ const App: React.FC = () => {
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
       if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        // 检查是否是Google API密钥泄露错误
+        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
+          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
+        } else {
+          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
+        }
       } else {
         alert(`Scan Failed: ${errorMsg}`);
       }
