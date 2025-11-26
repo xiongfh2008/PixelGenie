@@ -12,11 +12,7 @@ import {
   generateLogo,
   analyzeCompression
 } from './huggingface-config.js';
-import {
-  editImageWithBestApi,
-  selectImageEditingApi
-} from './image-editing-apis.js';
-// API failover functions are defined inline in this file
+import { executeWithFailover, withRetry } from './api-failover.js';
 
 // Load environment variables from server/.env
 import { fileURLToPath } from 'url';
@@ -35,9 +31,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 通用 base64 清理函数
-const cleanBase64 = (data) => data ? data.replace(/\s/g, '') : data;
-
 // Get API Keys
 const getApiKeys = () => {
   const apiKeys = {
@@ -48,12 +41,7 @@ const getApiKeys = () => {
     tencent: process.env.TENCENT_API_KEY,
     alibaba: process.env.ALIBABA_API_KEY,
     deepseek: process.env.DEEPSEEK_API_KEY,
-    cloudflare: process.env.CLOUDFLARE_API_TOKEN,
-    // Image editing APIs
-    clipdrop: process.env.CLIPDROP_API_KEY,
-    removebg: process.env.REMOVEBG_API_KEY,
-    replicate: process.env.REPLICATE_API_KEY,
-    stability: process.env.STABILITY_API_KEY
+    cloudflare: process.env.CLOUDFLARE_API_TOKEN
   };
   
   // Check if at least one API key is available
@@ -353,25 +341,18 @@ app.post('/api/analyze-image', async (req, res) => {
       return res.status(400).json({ error: 'Missing ELA image data (elaBase64)' });
     }
     
-    // Clean and validate base64 data (remove whitespace/newlines)
-    const cleanBase64 = (data) => data ? data.replace(/\s/g, '') : data;
-    
-    const cleanedOriginalBase64 = cleanBase64(originalBase64);
-    const cleanedElaBase64 = cleanBase64(elaBase64);
-    const cleanedMfrBase64 = mfrBase64 ? cleanBase64(mfrBase64) : null;
-    
-    // Validate that the cleaned data is actually base64 encoded
+    // Validate that the data is actually base64 encoded
     const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-    if (!base64Regex.test(cleanedOriginalBase64)) {
+    if (!base64Regex.test(originalBase64)) {
       return res.status(400).json({ error: 'Invalid original image data format - must be base64 encoded' });
     }
     
-    if (!base64Regex.test(cleanedElaBase64)) {
+    if (!base64Regex.test(elaBase64)) {
       return res.status(400).json({ error: 'Invalid ELA image data format - must be base64 encoded' });
     }
     
     // Validate MFR if provided
-    if (cleanedMfrBase64 && !base64Regex.test(cleanedMfrBase64)) {
+    if (mfrBase64 && !base64Regex.test(mfrBase64)) {
       return res.status(400).json({ error: 'Invalid MFR image data format - must be base64 encoded' });
     }
 
@@ -389,11 +370,11 @@ app.post('/api/analyze-image', async (req, res) => {
     const langInstruction = `The final JSON output values MUST be in ${targetLang}.`;
 
     const parts = [
-      { inlineData: { mimeType: 'image/jpeg', data: cleanedOriginalBase64 } },
-      { inlineData: { mimeType: 'image/png', data: cleanedElaBase64 } }
+      { inlineData: { mimeType: 'image/jpeg', data: originalBase64 } },
+      { inlineData: { mimeType: 'image/png', data: elaBase64 } }
     ];
-    if (cleanedMfrBase64) {
-      parts.push({ inlineData: { mimeType: 'image/png', data: cleanedMfrBase64 } });
+    if (mfrBase64) {
+      parts.push({ inlineData: { mimeType: 'image/png', data: mfrBase64 } });
     }
 
     parts.push({ text: `You are a Lead Digital Forensic Analyst specializing in detecting AI-generated media (Flux, Midjourney v6, Sora) and advanced Photoshop manipulation.
@@ -570,7 +551,7 @@ app.post('/api/analyze-image', async (req, res) => {
           // HuggingFace API endpoint for AI detection
           try {
             const apiKeys = getApiKeys();
-            const result = await detectAIGenerated(cleanedOriginalBase64, apiKeys.huggingface);
+            const result = await detectAIGenerated(originalBase64, apiKeys.huggingface);
             
             // Transform HuggingFace response to match expected format
             const transformedResult = {
@@ -726,98 +707,26 @@ app.post('/api/modify-image', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    // Clean base64 data
-    const cleanedBase64 = base64 ? cleanBase64(base64) : null;
-
-    if (!cleanedBase64) {
-      return res.status(400).json({ error: 'Image data is required' });
-    }
-
-    // Get API keys for image editing services
-    const apiKeys = getApiKeys();
-    
-    // Check if any image editing API is configured
-    const imageEditingKeys = {
-      clipdrop: apiKeys.clipdrop,
-      removebg: apiKeys.removebg,
-      replicate: apiKeys.replicate,
-      stability: apiKeys.stability,
-      huggingface: apiKeys.huggingface
-    };
-    
-    const hasImageEditingApi = Object.values(imageEditingKeys).some(key => key);
-    
-    if (!hasImageEditingApi) {
-      return res.status(503).json({
-        error: 'No image editing API configured',
-        details: 'Please configure at least one image editing API (ClipDrop, Remove.bg, Replicate, Stability AI, or HuggingFace)',
-        setupGuide: 'See IMAGE_EDITING_API_SETUP.md for configuration instructions'
-      });
-    }
-
-    console.log('🎨 Starting image editing with prompt:', prompt);
-    
-    // Use the new unified image editing API
-    try {
-      const result = await editImageWithBestApi(cleanedBase64, prompt, imageEditingKeys);
-      
-      console.log('✅ Image editing successful with provider:', result.provider);
-      
-      // Return the edited image
-      if (result.imageData) {
-        return res.json({ 
-          imageData: result.imageData,
-          provider: result.provider,
-          success: true
-        });
-      } else if (result.imageUrl) {
-        // If the API returns a URL instead of base64, fetch and convert it
-        const imageResponse = await fetch(result.imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-        
-        return res.json({ 
-          imageData: imageBase64,
-          provider: result.provider,
-          success: true
-        });
-      } else {
-        throw new Error('No image data returned from API');
-      }
-    } catch (editError) {
-      console.error('❌ Image editing failed:', editError.message);
-      
-      return res.status(500).json({
-        error: 'Image editing failed',
-        details: editError.message,
-        recommendation: 'Please check your API keys and try again. See IMAGE_EDITING_API_SETUP.md for help.'
-      });
-    }
-    
-    // ===== LEGACY CODE BELOW (kept for reference, but not executed) =====
-    // The code below is the old implementation that used Google Gemini
-    // It's kept here for reference but will not be executed due to the return statements above
-    
     const parts = [];
-    if (cleanedBase64 && mimeType) {
+    if (base64 && mimeType) {
       parts.push({
         inlineData: {
           mimeType: 'image/jpeg',
-          data: cleanedBase64
+          data: base64
         }
       });
     }
     parts.push({ text: prompt });
 
     // Multi-API provider support - require image modification capability
+    const apiKeys = getApiKeys();
     const provider = selectApiProvider('imageModification');
     
     let url, requestBody;
     
     switch (provider) {
       case 'google':
-        // 使用支持图像生成的模型
-        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKeys.google}`;
+        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKeys.google}`;
         requestBody = {
           contents: [{
             parts: parts
@@ -1057,15 +966,12 @@ app.post('/api/translate-image-text', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Clean base64 data
-    const cleanedBase64 = cleanBase64(base64);
-
     // Prepare parts for API request
     const parts = [
       {
         inlineData: {
           mimeType: mimeType,
-          data: cleanedBase64
+          data: base64
         }
       },
       { text: `Extract all text from this image and translate it to ${targetLang}. Return the result as JSON with the following structure: { "detected_language": "language_code", "original_text": "original text", "translated_text": "translated text", "blocks": [{ "original": "text", "translated": "text", "box_2d": [x, y, width, height] }] }` }
@@ -1252,9 +1158,6 @@ app.post('/api/detect-text-translate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    // Clean base64 data
-    const cleanedBase64 = cleanBase64(base64);
-
     // Multi-API provider support
     const apiKeys = getApiKeys();
     const provider = selectApiProvider();
@@ -1267,7 +1170,7 @@ app.post('/api/detect-text-translate', async (req, res) => {
         requestBody = {
           contents: [{
             parts: [
-              { inlineData: { mimeType, data: cleanedBase64 } },
+              { inlineData: { mimeType, data: base64 } },
               { text: `Detect all visible text in this image. Translate each text block to ${targetLang}.
        Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.
        IMPORTANT: Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text, and blocks. The blocks array should contain objects with original, translated, and box_2d properties. Do NOT include any text before or after the JSON.` }
@@ -1288,7 +1191,7 @@ app.post('/api/detect-text-translate', async (req, res) => {
             {
               role: 'user',
               content: [
-                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${cleanedBase64}` } },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
                 { type: 'text', text: `Detect all visible text in this image. Translate each text block to ${targetLang}. Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block. Return ONLY a valid JSON object with these exact keys: detected_language, original_text, translated_text, and blocks.` }
               ]
             }
@@ -1304,7 +1207,7 @@ app.post('/api/detect-text-translate', async (req, res) => {
             {
               role: 'user',
               content: [
-                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${cleanedBase64}` } },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
                 { type: 'text', text: `Detect all visible text in this image. Translate each text block to ${targetLang}. Return the original text, translated text, and the 2D bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) for each block.` }
               ]
             }

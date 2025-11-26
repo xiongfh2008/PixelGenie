@@ -7,14 +7,31 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+server/node_modules
+
+# Build output
 dist
 dist-ssr
 *.local
 
 # Environment variables (contains sensitive API keys)
 .env
+.env.local
+.env.*.local
 server/.env
+server/.env.local
+server/.env.*.local
+*.env
+*.env.local
+
+# Sensitive files
+**/secrets.json
+**/credentials.json
+**/*.pem
+**/*.key
+**/*.cert
 
 # Editor directories and files
 .vscode/*
@@ -26,3 +43,29 @@ server/.env
 *.njsproj
 *.sln
 *.sw?
+
+# OS files
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Test files with real data
+test-with-real-keys.js
+test-real-*.js
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Documentation that might contain keys
+PRIVATE_*.md
+SECRET_*.md

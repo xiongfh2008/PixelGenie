@@ -349,16 +349,8 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error(error);
       const errorMessage = error?.message || "Unknown error occurred";
-      if (errorMessage.includes("API_KEY") || errorMessage.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMessage.includes("leak") || errorMessage.includes("leaked")) {
-          alert(`API Error: ${errorMessage}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMessage}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Error processing image: ${errorMessage}`);
-      }
+      // 显示实际的错误信息，不要添加误导性的提示
+      alert(`Error processing image: ${errorMessage}`);
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -414,16 +406,7 @@ const App: React.FC = () => {
 
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
-      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
-          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Forensics Failed: ${errorMsg}`);
-      }
+      alert(`Forensics Failed: ${errorMsg}`);
     } 
     finally { setLoading(false); setLoadingText(""); }
   };
@@ -443,16 +426,7 @@ const App: React.FC = () => {
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
-      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
-          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Editing Failed: ${errorMsg}`);
-      }
+      alert(`Editing Failed: ${errorMsg}`);
     }
     finally { setLoading(false); setLoadingText(""); }
   };
@@ -497,16 +471,7 @@ const App: React.FC = () => {
       setModifiedImage(canvas.toDataURL('image/jpeg'));
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
-      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
-          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Translation Failed: ${errorMsg}`);
-      }
+      alert(`Translation Failed: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -518,16 +483,7 @@ const App: React.FC = () => {
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
-      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
-          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Logo Failed: ${errorMsg}`);
-      }
+      alert(`Logo Failed: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -641,16 +597,7 @@ const App: React.FC = () => {
       }
     } catch (e: any) { 
       const errorMsg = e?.message || "Unknown error";
-      if (errorMsg.includes("API_KEY") || errorMsg.includes("API key")) {
-        // 检查是否是Google API密钥泄露错误
-        if (errorMsg.includes("leak") || errorMsg.includes("leaked")) {
-          alert(`API Error: ${errorMsg}\n\nThe system has automatically switched to an alternative provider.`);
-        } else {
-          alert(`API Key Error: ${errorMsg}\n\nPlease set VITE_API_KEY in your .env file.`);
-        }
-      } else {
-        alert(`Scan Failed: ${errorMsg}`);
-      }
+      alert(`Scan Failed: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 

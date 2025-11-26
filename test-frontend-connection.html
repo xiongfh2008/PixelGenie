@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend Connection</title>
+</head>
+<body>
+    <h1>测试前端连接</h1>
+    <button onclick="testConnection()">测试连接</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testConnection() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = '测试中...';
+            
+            try {
+                // 测试 1: 健康检查
+                console.log('测试 1: 健康检查');
+                const healthResponse = await fetch('http://localhost:3001/api/health');
+                const healthData = await healthResponse.json();
+                console.log('健康检查响应:', healthData);
+                
+                // 测试 2: 模拟图像分析请求
+                console.log('测试 2: 模拟图像分析请求');
+                const testBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+                
+                const analyzeResponse = await fetch('http://localhost:3001/api/analyze-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        originalBase64: testBase64,
+                        elaBase64: testBase64,
+                        mimeType: 'image/png',
+                        lang: 'zh'
+                    })
+                });
+                
+                console.log('分析响应状态:', analyzeResponse.status);
+                
+                if (analyzeResponse.ok) {
+                    const analyzeData = await analyzeResponse.json();
+                    console.log('分析响应数据:', analyzeData);
+                    
+                    resultEl.textContent = `✅ 连接成功！\n\n健康检查: ${JSON.stringify(healthData, null, 2)}\n\n分析测试: 成功`;
+                } else {
+                    const errorData = await analyzeResponse.json().catch(() => ({ error: 'Unknown' }));
+                    resultEl.textContent = `❌ 分析请求失败\n\n状态: ${analyzeResponse.status}\n错误: ${JSON.stringify(errorData, null, 2)}`;
+                }
+                
+            } catch (error) {
+                console.error('连接错误:', error);
+                resultEl.textContent = `❌ 连接失败\n\n错误: ${error.message}\n\n可能的原因:\n1. 后端服务器未运行\n2. CORS 配置问题\n3. 网络连接问题`;
+            }
+        }
+    </script>
+</body>
+</html>
+
