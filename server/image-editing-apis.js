@@ -217,7 +217,7 @@ export const huggingfaceImageInpainting = async (imageBase64, prompt, apiKey) =>
   try {
     // 使用 Stable Diffusion Inpainting 模型
     const response = await fetch(
-      'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-inpainting',
+      'https://router.huggingface.co/models/stabilityai/stable-diffusion-2-inpainting',
       {
         method: 'POST',
         headers: {
