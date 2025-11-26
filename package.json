@@ -11,7 +11,7 @@
     "agree:cloudflare": "node server/agree-cloudflare-model.js",
     "prebuild": "npm install --prefer-online --platform=all",
     "build": "node scripts/build-with-rollup-fix.cjs",
-    "deploy": "npm install --prefer-online --platform=all && npm run build && wrangler pages deploy dist",
+    "deploy": "npm run build && wrangler pages deploy dist",
     "preview": "vite preview"
   },
   "dependencies": {
