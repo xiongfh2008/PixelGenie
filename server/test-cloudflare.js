@@ -106,7 +106,7 @@ try {
       });
       
       // 检查目标模型是否可用
-      const targetModel = '@cf/llava-hf/llava-1.5-7b-hf';
+      const targetModel = '@cf/meta/llama-3.2-11b-vision-instruct';
       const hasTargetModel = visionModels.some(model => model.name === targetModel);
       
       if (hasTargetModel) {
@@ -132,7 +132,7 @@ console.log('-'.repeat(60));
 
 try {
   const textTestResponse = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
     {
       method: 'POST',
       headers: {
@@ -174,7 +174,7 @@ try {
   const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
   
   const imageTestResponse = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+    `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
     {
       method: 'POST',
       headers: {

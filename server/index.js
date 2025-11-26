@@ -112,22 +112,31 @@ const checkApiHealth = async (provider, apiKey) => {
         return true;
         
       case 'cloudflare':
-        // Cloudflare Workers AI 健康检查
+        // Cloudflare Workers AI 健康检查 - 使用简单的文本测试
         if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
           console.warn('Cloudflare Account ID not configured');
           return false;
         }
         const cfResponse = await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/models`,
+          `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
           {
-            method: 'GET',
+            method: 'POST',
             headers: {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({
+              messages: [
+                {
+                  role: 'user',
+                  content: 'ping'
+                }
+              ]
+            })
           }
         );
-        return cfResponse.ok;
+        const cfData = await cfResponse.json();
+        return cfData.success === true;
         
       case 'xunfei':
       case 'deepseek':
@@ -393,8 +402,8 @@ app.post('/api/analyze-image', async (req, res) => {
           break;
           
         case 'cloudflare':
-          // Cloudflare Workers AI - using LLaVA 1.5 7B model for image analysis
-          url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+          // Cloudflare Workers AI - using Llama 3.2 Vision model for image analysis
+          url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`;
           requestBody = {
             messages: [
               {
@@ -701,7 +710,7 @@ app.post('/api/modify-image', async (req, res) => {
         
       case 'cloudflare':
         // Cloudflare Workers AI - using LLaVA 1.5 7B model
-        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`;
         requestBody = {
           messages: [
             {
@@ -962,7 +971,7 @@ app.post('/api/translate-image-text', async (req, res) => {
         
       case 'cloudflare':
         // Cloudflare Workers AI - using LLaVA 1.5 7B model
-        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`;
         requestBody = {
           messages: [
             {
@@ -1150,7 +1159,7 @@ app.post('/api/detect-text-translate', async (req, res) => {
         
       case 'cloudflare':
         // Cloudflare Workers AI - using LLaVA 1.5 7B model
-        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`;
+        url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`;
         requestBody = {
           messages: [
             {
