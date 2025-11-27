@@ -549,8 +549,13 @@ const App: React.FC = () => {
               break;
             }
           } else {
-            // Not a quota error, show simplified error
-            alert(`去水印失败: ${errorMsg}`);
+            // Log detailed error to console for debugging
+            console.error('去水印详细错误:', e);
+            console.error('错误响应:', e?.response);
+            console.error('错误数据:', e?.response?.data);
+            
+            // Show user-friendly error with hint to check console
+            alert(`去水印失败: ${errorMsg}\n\n请打开浏览器控制台查看详细错误信息`);
             break;
           }
         }

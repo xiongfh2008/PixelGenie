@@ -2,7 +2,9 @@
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
 // Backend API base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// In production (Vercel), use relative path; in development, use localhost
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 // Server status check
 let serverOnline: boolean | null = null;
@@ -68,7 +70,7 @@ const apiRequest = async (endpoint: string, data: any) => {
       throw new Error('处理超时，请重试或上传更小的图片');
     }
     // Generic error for production
-    throw new Error('处理失败，请重试');
+    throw new Error(errorMessage);
   }
 };
 
