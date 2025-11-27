@@ -31,8 +31,20 @@ const checkServerStatus = async (): Promise<boolean> => {
 
 // Helper function to make API requests
 const apiRequest = async (endpoint: string, data: any) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  console.log('apiRequest:', {
+    url,
+    endpoint,
+    API_BASE_URL,
+    hasData: !!data,
+    dataKeys: Object.keys(data || {}),
+    imageDataLength: data?.imageData?.length,
+    prompt: data?.prompt
+  });
+
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,12 +52,26 @@ const apiRequest = async (endpoint: string, data: any) => {
       body: JSON.stringify(data),
     });
 
+    console.log('Response:', {
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText,
+      url: response.url
+    });
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('Error response:', errorData);
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('Success response:', {
+      hasImageData: !!result.imageData,
+      imageDataLength: result.imageData?.length
+    });
+
+    return result;
   } catch (error: any) {
     if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
       // Check if server is actually offline
