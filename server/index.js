@@ -722,29 +722,8 @@ app.post('/api/modify-image', async (req, res) => {
       return res.status(400).json({ error: 'Image data is required' });
     }
 
-    // Get API keys for image editing services
+    // Get API keys
     const apiKeys = getApiKeys();
-    
-    // Check if any image editing API is configured
-    const imageEditingKeys = {
-      clipdrop: apiKeys.clipdrop,
-      removebg: apiKeys.removebg,
-      replicate: apiKeys.replicate,
-      stability: apiKeys.stability,
-      huggingface: apiKeys.huggingface
-    };
-    
-    const hasImageEditingApi = Object.values(imageEditingKeys).some(key => key);
-    
-    if (!hasImageEditingApi) {
-      return res.status(503).json({
-        error: 'No image editing API configured',
-        details: 'Please configure at least one image editing API (ClipDrop, Remove.bg, Replicate, Stability AI, or HuggingFace)',
-        setupGuide: 'See IMAGE_EDITING_API_SETUP.md for configuration instructions'
-      });
-    }
-
-    console.log('🎨 Starting image editing with prompt:', prompt);
     
     // Check if Google API key is available
     if (!apiKeys.google) {
@@ -753,6 +732,8 @@ app.post('/api/modify-image', async (req, res) => {
         details: 'Google API密钥未配置，请在Vercel环境变量中添加GOOGLE_API_KEY'
       });
     }
+
+    console.log('🎨 Starting image editing with prompt:', prompt);
 
     console.log('🎨 Using Google Gemini for image editing');
     
