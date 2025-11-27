@@ -56,10 +56,17 @@ const apiRequest = async (endpoint: string, data: any) => {
         throw new Error('服务暂时不可用，请稍后重试');
       }
     }
+    // Log detailed error for debugging
+    console.error('API Request Error Details:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack
+    });
+    
     // Simplify error messages for production
     const errorMessage = error.message || 'Unknown error';
     if (errorMessage.includes('HTTP 401') || errorMessage.includes('authentication')) {
-      throw new Error('服务认证失败，请联系技术支持');
+      throw new Error('API密钥未配置或无效，请在Vercel环境变量中配置GOOGLE_API_KEY');
     } else if (errorMessage.includes('HTTP 400') || errorMessage.includes('Invalid')) {
       throw new Error('图片格式不正确，请上传有效的图片文件');
     } else if (errorMessage.includes('HTTP 429') || errorMessage.includes('quota') || errorMessage.includes('Quota')) {
@@ -69,7 +76,7 @@ const apiRequest = async (endpoint: string, data: any) => {
     } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
       throw new Error('处理超时，请重试或上传更小的图片');
     }
-    // Generic error for production
+    // Return original error message for debugging
     throw new Error(errorMessage);
   }
 };
