@@ -60,21 +60,10 @@ const getApiKeys = () => {
   const availableKeys = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
   
   if (availableKeys.length === 0) {
-    console.error('❌ No API keys found in server environment variables');
-    console.error('📁 Expected location: server/.env');
-    console.error('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY, TENCENT_API_KEY, ALIBABA_API_KEY, DEEPSEEK_API_KEY, CLOUDFLARE_API_TOKEN');
-    console.error('📋 Current environment variables:');
-    console.error(`   GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   BAIDU_API_KEY: ${process.env.BAIDU_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   XUNFEI_API_KEY: ${process.env.XUNFEI_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   XUNFEI_APP_ID: ${process.env.XUNFEI_APP_ID ? 'Set' : 'Not set'}`);
-    console.error(`   XUNFEI_API_SECRET: ${process.env.XUNFEI_API_SECRET ? 'Set' : 'Not set'}`);
-    console.error(`   TENCENT_API_KEY: ${process.env.TENCENT_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   ALIBABA_API_KEY: ${process.env.ALIBABA_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? 'Set' : 'Not set'}`);
-    console.error(`   CLOUDFLARE_API_TOKEN: ${process.env.CLOUDFLARE_API_TOKEN ? 'Set' : 'Not set'}`);
-    console.error(`   CLOUDFLARE_ACCOUNT_ID: ${process.env.CLOUDFLARE_ACCOUNT_ID ? 'Set' : 'Not set'}`);
-    throw new Error('No API keys configured. Please check server/.env file.');
+    console.warn('⚠️ No API keys found in server environment variables');
+    console.warn('📁 Expected location: server/.env');
+    console.warn('💡 Please set at least one of: GOOGLE_API_KEY, BAIDU_API_KEY, XUNFEI_API_KEY, HUGGINGFACE_API_KEY, TENCENT_API_KEY, ALIBABA_API_KEY, DEEPSEEK_API_KEY, CLOUDFLARE_API_TOKEN');
+    console.warn('⚠️ Server will start but API functions will not work until keys are configured');
   }
   
   console.log(`✅ Available API keys: ${availableKeys.join(', ')}`);
@@ -314,9 +303,9 @@ const selectApiProvider = (requiredCapability = null, excludeProviders = []) => 
   }
   
   if (requiredCapability) {
-    throw new Error(`No available API providers support ${requiredCapability}`);
+    throw new Error(`没有可用的API服务支持此功能`);
   }
-  throw new Error('No available API providers');
+  throw new Error('没有可用的API服务，请配置API密钥');
 };
 
 // Root endpoint
@@ -1541,23 +1530,36 @@ const startApiHealthChecks = async () => {
 };
 
 // Start server
+// Always start the server when this file is executed
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  
-  // Check available API keys
-  try {
-    const apiKeys = getApiKeys();
-    const availableProviders = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
-    console.log(`✅ Available API providers: ${availableProviders.join(', ')}`);
-    console.log(`🔑 Active provider: ${selectApiProvider()}`);
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📡 API Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`🎨 Frontend should connect to: http://localhost:${PORT}`);
     
-    // 启动定期健康检查（每5分钟检查一次）
-    setInterval(startApiHealthChecks, 5 * 60 * 1000); // 5分钟
-    // 立即执行一次健康检查
-    startApiHealthChecks();
-  } catch (error) {
-    console.error('⚠️ API Key Warning:', error.message);
-  }
+    // Check available API keys
+    try {
+      const apiKeys = getApiKeys();
+      const availableProviders = Object.entries(apiKeys).filter(([_, key]) => key).map(([name]) => name);
+      
+      if (availableProviders.length > 0) {
+        console.log(`✅ Available API providers: ${availableProviders.join(', ')}`);
+        try {
+          console.log(`🔑 Active provider: ${selectApiProvider()}`);
+        } catch (e) {
+          console.warn('⚠️ Could not select API provider:', e.message);
+        }
+        
+        // 启动定期健康检查（每5分钟检查一次）
+        setInterval(startApiHealthChecks, 5 * 60 * 1000); // 5分钟
+        // 立即执行一次健康检查
+        startApiHealthChecks();
+      } else {
+        console.warn('⚠️ No API providers available. Server running but API functions will not work.');
+      }
+    } catch (error) {
+      console.warn('⚠️ API Key Warning:', error.message);
+      console.warn('⚠️ Server running but API functions will not work until keys are configured.');
+    }
 });
 
 export default app;

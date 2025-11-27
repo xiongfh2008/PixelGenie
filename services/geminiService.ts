@@ -4,6 +4,31 @@ import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 // Backend API base URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
+// Server status check
+let serverOnline: boolean | null = null;
+let lastCheckTime = 0;
+
+const checkServerStatus = async (): Promise<boolean> => {
+  // Cache for 5 seconds
+  if (serverOnline !== null && Date.now() - lastCheckTime < 5000) {
+    return serverOnline;
+  }
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3000) // 3 second timeout
+    });
+    serverOnline = response.ok;
+    lastCheckTime = Date.now();
+    return serverOnline;
+  } catch {
+    serverOnline = false;
+    lastCheckTime = Date.now();
+    return false;
+  }
+};
+
 // Helper function to make API requests
 const apiRequest = async (endpoint: string, data: any) => {
   try {
@@ -22,10 +47,28 @@ const apiRequest = async (endpoint: string, data: any) => {
 
     return await response.json();
   } catch (error: any) {
-    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-      throw new Error('无法连接到服务器。请确保后端服务器正在运行（npm run dev:server）');
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError') || error.name === 'TypeError') {
+      // Check if server is actually offline
+      const isOnline = await checkServerStatus();
+      if (!isOnline) {
+        throw new Error('服务暂时不可用，请稍后重试');
+      }
     }
-    throw error;
+    // Simplify error messages for production
+    const errorMessage = error.message || 'Unknown error';
+    if (errorMessage.includes('HTTP 401') || errorMessage.includes('authentication')) {
+      throw new Error('服务认证失败，请联系技术支持');
+    } else if (errorMessage.includes('HTTP 400') || errorMessage.includes('Invalid')) {
+      throw new Error('图片格式不正确，请上传有效的图片文件');
+    } else if (errorMessage.includes('HTTP 429') || errorMessage.includes('quota') || errorMessage.includes('Quota')) {
+      throw new Error('服务繁忙，请稍后重试');
+    } else if (errorMessage.includes('HTTP 500') || errorMessage.includes('Internal')) {
+      throw new Error('服务器处理出错，请稍后重试');
+    } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+      throw new Error('处理超时，请重试或上传更小的图片');
+    }
+    // Generic error for production
+    throw new Error('处理失败，请重试');
   }
 };
 

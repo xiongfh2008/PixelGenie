@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelGenie - 服务器状态检查</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .logo {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .status {
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 18px;
+        }
+        
+        .status.checking {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+        
+        .status.online {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        
+        .status.offline {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+        
+        .instructions {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .instructions h2 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .step {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .step strong {
+            color: #667eea;
+            font-size: 18px;
+        }
+        
+        code {
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+        
+        .button {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        
+        .button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .button-group {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎨</div>
+        <h1>PixelGenie AI 图像处理平台</h1>
+        
+        <div id="checking" class="status checking">
+            <div class="spinner"></div>
+            <p>正在检查后端服务器状态...</p>
+        </div>
+        
+        <div id="online" class="status online hidden">
+            <p>✅ 后端服务器运行正常！</p>
+            <p style="margin-top: 10px; font-size: 14px;">正在跳转到应用...</p>
+        </div>
+        
+        <div id="offline" class="status offline hidden">
+            <p>❌ 后端服务器未运行</p>
+        </div>
+        
+        <div id="instructions" class="instructions hidden">
+            <h2>📋 启动步骤</h2>
+            
+            <div class="step">
+                <strong>方法一：使用启动脚本（推荐）</strong>
+                <p style="margin-top: 10px;">
+                    双击项目根目录的 <code>快速启动.bat</code> 文件
+                </p>
+                <p style="margin-top: 5px; font-size: 14px; color: #666;">
+                    这将自动启动前端和后端服务器
+                </p>
+            </div>
+            
+            <div class="step">
+                <strong>方法二：手动启动</strong>
+                <p style="margin-top: 10px;">
+                    打开命令提示符（CMD），运行：
+                </p>
+                <p style="margin-top: 10px;">
+                    <code>cd D:\AIProject\PixelGenie\server</code><br>
+                    <code>node index.js</code>
+                </p>
+            </div>
+            
+            <div class="step">
+                <strong>方法三：使用 npm 脚本</strong>
+                <p style="margin-top: 10px;">
+                    在项目根目录运行：
+                </p>
+                <p style="margin-top: 10px;">
+                    <code>npm run dev:server</code>
+                </p>
+            </div>
+            
+            <div class="button-group">
+                <button class="button" onclick="recheckServer()">🔄 重新检查</button>
+                <button class="button secondary" onclick="showHelp()">❓ 获取帮助</button>
+            </div>
+        </div>
+        
+        <div id="help" class="instructions hidden">
+            <h2>🆘 常见问题</h2>
+            
+            <div class="step">
+                <strong>问题：端口被占用</strong>
+                <p style="margin-top: 10px;">
+                    运行 <code>netstat -ano | findstr :3001</code> 查找占用进程<br>
+                    然后使用 <code>taskkill /PID [进程ID] /F</code> 结束进程
+                </p>
+            </div>
+            
+            <div class="step">
+                <strong>问题：缺少依赖</strong>
+                <p style="margin-top: 10px;">
+                    在项目根目录运行 <code>npm install</code>
+                </p>
+            </div>
+            
+            <div class="step">
+                <strong>问题：环境变量未配置</strong>
+                <p style="margin-top: 10px;">
+                    确保 <code>server/.env</code> 文件存在并包含必要的 API 密钥
+                </p>
+            </div>
+            
+            <div class="button-group">
+                <button class="button" onclick="hideHelp()">← 返回</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:3001/api/health';
+        
+        async function checkServer() {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (response.ok) {
+                    document.getElementById('checking').classList.add('hidden');
+                    document.getElementById('online').classList.remove('hidden');
+                    
+                    // Redirect to main app after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                } else {
+                    showOffline();
+                }
+            } catch (error) {
+                showOffline();
+            }
+        }
+        
+        function showOffline() {
+            document.getElementById('checking').classList.add('hidden');
+            document.getElementById('offline').classList.remove('hidden');
+            document.getElementById('instructions').classList.remove('hidden');
+        }
+        
+        function recheckServer() {
+            document.getElementById('offline').classList.add('hidden');
+            document.getElementById('instructions').classList.add('hidden');
+            document.getElementById('help').classList.add('hidden');
+            document.getElementById('checking').classList.remove('hidden');
+            
+            setTimeout(checkServer, 500);
+        }
+        
+        function showHelp() {
+            document.getElementById('instructions').classList.add('hidden');
+            document.getElementById('help').classList.remove('hidden');
+        }
+        
+        function hideHelp() {
+            document.getElementById('help').classList.add('hidden');
+            document.getElementById('instructions').classList.remove('hidden');
+        }
+        
+        // Auto-check on load
+        window.onload = () => {
+            setTimeout(checkServer, 1000);
+        };
+    </script>
+</body>
+</html>
+

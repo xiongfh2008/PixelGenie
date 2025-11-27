@@ -348,9 +348,8 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error(error);
-      const errorMessage = error?.message || "Unknown error occurred";
-      // 显示实际的错误信息，不要添加误导性的提示
-      alert(`Error processing image: ${errorMessage}`);
+      const errorMessage = error?.message || "处理失败";
+      alert(`图片处理失败: ${errorMessage}`);
     } finally {
       setLoading(false);
       setLoadingText("");
@@ -405,8 +404,8 @@ const App: React.FC = () => {
       setAnalysisResult(result);
 
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Forensics Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "分析失败";
+      alert(`图片分析失败: ${errorMsg}`);
     } 
     finally { setLoading(false); setLoadingText(""); }
   };
@@ -425,8 +424,8 @@ const App: React.FC = () => {
       const resultBase64 = await modifyImage(originalBase64, file.type, prompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Editing Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "编辑失败";
+      alert(`图片编辑失败: ${errorMsg}`);
     }
     finally { setLoading(false); setLoadingText(""); }
   };
@@ -470,8 +469,8 @@ const App: React.FC = () => {
       }
       setModifiedImage(canvas.toDataURL('image/jpeg'));
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Translation Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "翻译失败";
+      alert(`文字翻译失败: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -482,8 +481,8 @@ const App: React.FC = () => {
       const resultBase64 = await modifyImage(originalBase64, file?.type || null, finalPrompt);
       setModifiedImage(`data:image/jpeg;base64,${resultBase64}`);
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Logo Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "生成失败";
+      alert(`Logo生成失败: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -498,8 +497,8 @@ const App: React.FC = () => {
       setCompResultUrl(dataUrl);
       setCompSize(Math.round((dataUrl.length - 23) * 3 / 4));
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Compression Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "分析失败";
+      alert(`压缩分析失败: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 
@@ -511,7 +510,7 @@ const App: React.FC = () => {
       if (dewatermarkMode === 'auto') {
         prompt = `Strictly remove object described as "${watermarkText || 'watermark'}". Inpaint background. No new objects.`;
       } else {
-        if (!manualMaskBase64) { alert("Paint over watermark first."); setLoading(false); return; }
+        if (!manualMaskBase64) { alert("请先标记水印区域"); setLoading(false); return; }
         const img = new Image(); img.src = previewUrl!; await new Promise(r => img.onload = r);
         const maskImg = new Image(); maskImg.src = manualMaskBase64; await new Promise(r => maskImg.onload = r);
         const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
@@ -545,32 +544,13 @@ const App: React.FC = () => {
               const metrics = quotaInfo.metrics || 'Rate limit exceeded';
               const retryAfter = quotaInfo.retryAfter || 'a few seconds';
               
-              const quotaMessage = `You exceeded your current quota.\n\n` +
-                `Error details: ${metrics}\n` +
-                `Please wait ${retryAfter} before trying again.\n\n` +
-                `To resolve this issue:\n` +
-                `1. Check your plan and billing details at https://aistudio.google.com/\n` +
-                `2. Learn more about rate limits at https://ai.google.dev/gemini-api/docs/rate.limits\n` +
-                `3. Monitor your usage at https://ai.google.dev/usage?tab=rate-limit\n\n` +
-                `Consider upgrading your plan if you frequently hit rate limits.`;
-              alert(`Dewatermark Failed: ${quotaMessage}`);
+              const quotaMessage = `服务繁忙，请稍后重试`;
+              alert(`去水印失败: ${quotaMessage}`);
               break;
             }
           } else {
-            // Not a quota error, show regular error handling
-            const errorDetails = e?.response?.data?.details || "";
-            const errorResponse = e?.response?.data?.response || "";
-            
-            // Create a more detailed error message
-            let fullErrorMessage = `Dewatermark Failed: ${errorMsg}`;
-            if (errorDetails) {
-              fullErrorMessage += `\n\nDetails: ${errorDetails}`;
-            }
-            if (errorResponse) {
-              fullErrorMessage += `\n\nResponse: ${JSON.stringify(errorResponse, null, 2)}`;
-            }
-            
-            alert(fullErrorMessage);
+            // Not a quota error, show simplified error
+            alert(`去水印失败: ${errorMsg}`);
             break;
           }
         }
@@ -596,8 +576,8 @@ const App: React.FC = () => {
         setAiScanResult({ detected: prob > 50, tool: "Unknown AI Model", prob });
       }
     } catch (e: any) { 
-      const errorMsg = e?.message || "Unknown error";
-      alert(`Scan Failed: ${errorMsg}`);
+      const errorMsg = e?.message || "检测失败";
+      alert(`检测失败: ${errorMsg}`);
     } finally { setLoading(false); setLoadingText(""); }
   };
 

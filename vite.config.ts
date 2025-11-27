@@ -36,7 +36,14 @@ export default defineConfig(({ mode }) => {
     // Development server optimization
     server: {
       host: true,
-      port: 5173
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          secure: false
+        }
+      }
     },
     // Preview server optimization
     preview: {

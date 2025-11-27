@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Backend Connection Test</h1>
+    
+    <div class="status info">
+        <strong>测试说明：</strong>
+        <p>1. 确保后端服务器正在运行（端口 3001）</p>
+        <p>2. 点击下面的按钮测试连接</p>
+    </div>
+    
+    <div>
+        <button onclick="testDirect()">测试直接连接 (localhost:3001)</button>
+        <button onclick="testProxy()">测试代理连接 (/api)</button>
+        <button onclick="startServer()">启动后端服务器</button>
+    </div>
+    
+    <div id="result"></div>
+    
+    <script>
+        const resultDiv = document.getElementById('result');
+        
+        function showResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            resultDiv.appendChild(div);
+        }
+        
+        async function testDirect() {
+            resultDiv.innerHTML = '';
+            showResult('正在测试直接连接到 http://localhost:3001/api/health ...', 'info');
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/health');
+                const data = await response.json();
+                showResult(`✅ 连接成功！<pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                showResult(`❌ 连接失败：${error.message}<br><br>
+                    <strong>可能的原因：</strong><br>
+                    1. 后端服务器未启动<br>
+                    2. 端口 3001 被占用<br>
+                    3. 防火墙阻止连接<br><br>
+                    <strong>解决方法：</strong><br>
+                    请运行：<code>cd server && node index.js</code>`, 'error');
+            }
+        }
+        
+        async function testProxy() {
+            resultDiv.innerHTML = '';
+            showResult('正在测试代理连接到 /api/health ...', 'info');
+            
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                showResult(`✅ 代理连接成功！<pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+            } catch (error) {
+                showResult(`❌ 代理连接失败：${error.message}<br><br>
+                    这是正常的，因为这个页面不是通过 Vite 开发服务器访问的。`, 'error');
+            }
+        }
+        
+        async function startServer() {
+            showResult('⚠️ 无法从浏览器启动服务器。<br><br>请手动运行以下命令：<br><code>cd D:\\AIProject\\PixelGenie\\server && node index.js</code><br><br>或者双击 <code>启动项目.bat</code> 文件', 'info');
+        }
+        
+        // 自动测试
+        window.onload = () => {
+            setTimeout(testDirect, 1000);
+        };
+    </script>
+</body>
+</html>
+
