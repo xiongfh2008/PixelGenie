@@ -19,8 +19,7 @@ export default defineConfig(({ mode }) => {
         // Performance optimization
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
-            ui: ['@google/genai', '@google/generative-ai']
+            vendor: ['react', 'react-dom']
           }
         }
       },

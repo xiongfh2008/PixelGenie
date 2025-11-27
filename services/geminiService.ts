@@ -1,28 +1,8 @@
 
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
-// Backend API base URL
-// Force relative path for all environments except explicit localhost
-const API_BASE_URL = (() => {
-  // If explicitly set, use it
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
-  }
-  
-  // Only use localhost if explicitly on localhost domain
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
-    
-    if (isLocalhost && window.location.port === '5173') {
-      // Only in local dev server
-      return 'http://localhost:3001';
-    }
-  }
-  
-  // Default: use relative path (works for Vercel and all production)
-  return '';
-})();
+// Backend API base URL - ALWAYS use relative path in production
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 // Server status check
 let serverOnline: boolean | null = null;

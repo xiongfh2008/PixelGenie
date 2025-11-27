@@ -9,7 +9,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "test:cloudflare": "node server/test-cloudflare.js",
     "agree:cloudflare": "node server/agree-cloudflare-model.js",
-    "prebuild": "npm install --prefer-online",
+    "prebuild": "npm install --prefer-online --omit=optional",
     "build": "vite build",
     "preview": "vite preview"
   },
