@@ -2,23 +2,27 @@
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
 // Backend API base URL
-// Use relative path for production (Vercel), localhost for development
-const getApiBaseUrl = () => {
+// Force relative path for all environments except explicit localhost
+const API_BASE_URL = (() => {
+  // If explicitly set, use it
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  // Check if running on localhost
+  
+  // Only use localhost if explicitly on localhost domain
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
+    
+    if (isLocalhost && window.location.port === '5173') {
+      // Only in local dev server
       return 'http://localhost:3001';
     }
   }
-  // Production: use relative path
+  
+  // Default: use relative path (works for Vercel and all production)
   return '';
-};
-
-const API_BASE_URL = getApiBaseUrl();
+})();
 
 // Server status check
 let serverOnline: boolean | null = null;

@@ -749,7 +749,11 @@ app.post('/api/modify-image', async (req, res) => {
     parts.push({ text: prompt });
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent`;
+      if (!apiKeys.google) {
+        throw new Error('GOOGLE_API_KEY未配置');
+      }
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKeys.google}`;
       const requestBody = {
         contents: [{
           parts: parts
@@ -761,9 +765,10 @@ app.post('/api/modify-image', async (req, res) => {
       };
 
       const headers = { 
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKeys.google
+        'Content-Type': 'application/json'
       };
+
+      console.log('Calling Google API:', url.substring(0, 80) + '...');
 
       const response = await fetch(url, {
         method: 'POST',
@@ -773,13 +778,19 @@ app.post('/api/modify-image', async (req, res) => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: { message: errorText } };
+        }
         console.error('Google API error:', errorData);
-        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+        throw new Error(errorData.error?.message || `HTTP ${response.status}: ${errorText.substring(0, 100)}`);
       }
 
       const data = await response.json();
-      console.log('Google API response:', JSON.stringify(data).substring(0, 200));
+      console.log('Google API response received');
       
       // Extract image data from response
       if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
@@ -797,10 +808,11 @@ app.post('/api/modify-image', async (req, res) => {
         }
       }
 
-      console.error('No image in response:', data);
+      console.error('No image in response:', JSON.stringify(data).substring(0, 500));
       throw new Error('模型未生成图像，请尝试调整提示词或使用其他图片');
     } catch (error) {
-      console.error('❌ Image editing failed:', error);
+      console.error('❌ Image editing failed:', error.message);
+      console.error('Error stack:', error.stack);
       
       return res.status(500).json({
         error: '图像编辑失败',
