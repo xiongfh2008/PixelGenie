@@ -746,7 +746,14 @@ app.post('/api/modify-image', async (req, res) => {
 
     console.log('🎨 Starting image editing with prompt:', prompt);
     
-    // Use Google Gemini for image editing (fallback to legacy method)
+    // Check if Google API key is available
+    if (!apiKeys.google) {
+      return res.status(503).json({
+        error: '图像编辑功能暂不可用',
+        details: 'Google API密钥未配置，请在Vercel环境变量中添加GOOGLE_API_KEY'
+      });
+    }
+
     console.log('🎨 Using Google Gemini for image editing');
     
     const parts = [];
@@ -760,9 +767,6 @@ app.post('/api/modify-image', async (req, res) => {
     }
     parts.push({ text: prompt });
 
-    // Use Google Gemini API
-    const provider = 'google';
-    
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent`;
       const requestBody = {
@@ -789,10 +793,12 @@ app.post('/api/modify-image', async (req, res) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('Google API error:', errorData);
         throw new Error(errorData.error?.message || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('Google API response:', JSON.stringify(data).substring(0, 200));
       
       // Extract image data from response
       if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
@@ -803,18 +809,20 @@ app.post('/api/modify-image', async (req, res) => {
           
           for (const part of responseParts) {
             if (part.inlineData && part.inlineData.data) {
+              console.log('✅ Image generated successfully');
               return res.json({ imageData: part.inlineData.data });
             }
           }
         }
       }
 
-      throw new Error('No image generated in response');
+      console.error('No image in response:', data);
+      throw new Error('模型未生成图像，请尝试调整提示词或使用其他图片');
     } catch (error) {
-      console.error('❌ Image editing failed:', error.message);
+      console.error('❌ Image editing failed:', error);
       
       return res.status(500).json({
-        error: 'Image editing failed',
+        error: '图像编辑失败',
         details: error.message
       });
     }
