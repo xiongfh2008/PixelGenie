@@ -1554,9 +1554,9 @@ const startApiHealthChecks = async () => {
   }
 };
 
-// Start server
-// Always start the server when this file is executed
-app.listen(PORT, '0.0.0.0', () => {
+// Start server only in local development
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📡 API Health Check: http://localhost:${PORT}/api/health`);
     console.log(`🎨 Frontend should connect to: http://localhost:${PORT}`);
@@ -1575,8 +1575,7 @@ app.listen(PORT, '0.0.0.0', () => {
         }
         
         // 启动定期健康检查（每5分钟检查一次）
-        setInterval(startApiHealthChecks, 5 * 60 * 1000); // 5分钟
-        // 立即执行一次健康检查
+        setInterval(startApiHealthChecks, 5 * 60 * 1000);
         startApiHealthChecks();
       } else {
         console.warn('⚠️ No API providers available. Server running but API functions will not work.');
@@ -1585,6 +1584,8 @@ app.listen(PORT, '0.0.0.0', () => {
       console.warn('⚠️ API Key Warning:', error.message);
       console.warn('⚠️ Server running but API functions will not work until keys are configured.');
     }
-});
+  });
+}
 
+// Export for Vercel serverless
 export default app;
