@@ -2,9 +2,7 @@
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
 // Backend API base URL
-// In production (Vercel/Cloudflare), use relative path; in development, use localhost
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.PROD ? '' : 'http://localhost:3001');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
 
 // Server status check
 let serverOnline: boolean | null = null;
