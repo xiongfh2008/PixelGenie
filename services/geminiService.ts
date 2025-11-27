@@ -2,9 +2,23 @@
 import { AnalysisData, Language, TranslationData, TextBlock } from "../types";
 
 // Backend API base URL
-// In production (Vercel), use relative path; in development, use localhost
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.PROD ? '' : 'http://localhost:3001');
+// Use relative path for production (Vercel), localhost for development
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  // Check if running on localhost
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+  }
+  // Production: use relative path
+  return '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Server status check
 let serverOnline: boolean | null = null;
