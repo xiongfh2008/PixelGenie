@@ -746,40 +746,76 @@ app.post('/api/modify-image', async (req, res) => {
 
     console.log('🎨 Starting image editing with prompt:', prompt);
     
-    // Use the new unified image editing API
+    // Use Google Gemini for image editing (fallback to legacy method)
+    console.log('🎨 Using Google Gemini for image editing');
+    
+    const parts = [];
+    if (cleanedBase64 && mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: cleanedBase64
+        }
+      });
+    }
+    parts.push({ text: prompt });
+
+    // Use Google Gemini API
+    const provider = 'google';
+    
     try {
-      const result = await editImageWithBestApi(cleanedBase64, prompt, imageEditingKeys);
-      
-      console.log('✅ Image editing successful with provider:', result.provider);
-      
-      // Return the edited image
-      if (result.imageData) {
-        return res.json({ 
-          imageData: result.imageData,
-          provider: result.provider,
-          success: true
-        });
-      } else if (result.imageUrl) {
-        // If the API returns a URL instead of base64, fetch and convert it
-        const imageResponse = await fetch(result.imageUrl);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-        
-        return res.json({ 
-          imageData: imageBase64,
-          provider: result.provider,
-          success: true
-        });
-      } else {
-        throw new Error('No image data returned from API');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent`;
+      const requestBody = {
+        contents: [{
+          parts: parts
+        }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 4096
+        }
+      };
+
+      const headers = { 
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKeys.google
+      };
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
       }
-    } catch (editError) {
-      console.error('❌ Image editing failed:', editError.message);
+
+      const data = await response.json();
+      
+      // Extract image data from response
+      if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 0) {
+        const firstCandidate = data.candidates[0];
+        
+        if (firstCandidate.content && firstCandidate.content.parts && Array.isArray(firstCandidate.content.parts)) {
+          const responseParts = firstCandidate.content.parts;
+          
+          for (const part of responseParts) {
+            if (part.inlineData && part.inlineData.data) {
+              return res.json({ imageData: part.inlineData.data });
+            }
+          }
+        }
+      }
+
+      throw new Error('No image generated in response');
+    } catch (error) {
+      console.error('❌ Image editing failed:', error.message);
       
       return res.status(500).json({
         error: 'Image editing failed',
-        details: editError.message,
-        recommendation: 'Please check your API keys and try again. See IMAGE_EDITING_API_SETUP.md for help.'
+        details: error.message
       });
     }
     
